@@ -48,7 +48,7 @@ export function showCategoryManager(
     width: '100%-2',
     height: 1,
     tags: true,
-    style: { bg: 'black', fg: 'gray' },
+    style: { bg: 'green', fg: 'black' },
   });
 
   function setStatus(msg: string): void {
@@ -58,7 +58,7 @@ export function showCategoryManager(
 
   function resetStatus(): void {
     setStatus(
-      ' {bold}a{/bold}:追加  {bold}r{/bold}:リネーム  {bold}d{/bold}:削除  {bold}J/K{/bold}:順序変更  {bold}Esc/q{/bold}:閉じる'
+      ' {bold}a{/bold}:add  {bold}r{/bold}:rename  {bold}d{/bold}:delete  {bold}J/K{/bold}:reorder  {bold}j/k{/bold}:move  {bold}Esc/q{/bold}:close'
     );
   }
 
@@ -73,7 +73,7 @@ export function showCategoryManager(
   function render(): void {
     if (categories.length === 0) {
       contentBox.setContent(
-        '\n {gray-fg}カテゴリがありません。{bold}a{/bold} キーで追加できます。{/gray-fg}'
+        '\n {gray-fg}No categories. Press {bold}a{/bold} to add one.{/gray-fg}'
       );
       screen.render();
       return;
@@ -103,7 +103,7 @@ export function showCategoryManager(
     onAbort: () => void
   ): void {
     let value = initialValue;
-    setStatus(`${promptText}: ${value}▋  (Enter:確定  Esc:キャンセル)`);
+    setStatus(`${promptText}: ${value}▋  (Enter:confirm  Esc:cancel)`);
 
     inputHandler = (ch, key) => {
       if (key.name === 'enter') {
@@ -116,10 +116,10 @@ export function showCategoryManager(
         onAbort();
       } else if (key.name === 'backspace') {
         value = value.slice(0, -1);
-        setStatus(`${promptText}: ${value}▋  (Enter:確定  Esc:キャンセル)`);
+        setStatus(`${promptText}: ${value}▋  (Enter:confirm  Esc:cancel)`);
       } else if (ch && !key.ctrl && ch.length === 1) {
         value += ch;
-        setStatus(`${promptText}: ${value}▋  (Enter:確定  Esc:キャンセル)`);
+        setStatus(`${promptText}: ${value}▋  (Enter:confirm  Esc:cancel)`);
       }
     };
   }
@@ -138,21 +138,21 @@ export function showCategoryManager(
       selectedIndex = Math.min(Math.max(categories.length - 1, 0), selectedIndex + 1);
       render();
     } else if (ch === 'a') {
-      promptInput('カテゴリ名', '', (name) => {
+      promptInput('Category name', '', (name) => {
         q.createCategory(name);
         loadAndRender();
       }, () => {});
     } else if (ch === 'r') {
       if (categories.length === 0) return;
       const cat = categories[selectedIndex];
-      promptInput('リネーム', cat.name, (newName) => {
+      promptInput('Rename to', cat.name, (newName) => {
         q.renameCategory(cat.id, newName);
         loadAndRender();
       }, () => {});
     } else if (ch === 'd') {
       if (categories.length === 0) return;
       const cat = categories[selectedIndex];
-      setStatus(`"${cat.name}" を削除しますか？ (y/N)`);
+      setStatus(`Delete "${cat.name}"? (y/N)`);
       inputHandler = (ch2) => {
         inputHandler = null;
         if (ch2 === 'y') {
