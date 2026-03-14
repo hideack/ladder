@@ -26,11 +26,8 @@ export function createLayout(): Layout {
     label: ' Feeds ',
     tags: true,
     style: {
-      border: { fg: 'blue' },
-      label: { fg: 'white', bold: true },
-      focus: {
-        border: { fg: 'cyan' },
-      },
+      border: { fg: 'gray' },
+      label: { fg: 'gray' },
     },
     keys: true,
     mouse: true,
@@ -38,7 +35,7 @@ export function createLayout(): Layout {
     alwaysScroll: true,
     scrollbar: {
       ch: '│',
-      style: { fg: 'blue' },
+      style: { fg: 'gray' },
     },
   });
 
@@ -52,11 +49,8 @@ export function createLayout(): Layout {
     label: ' Entries ',
     tags: true,
     style: {
-      border: { fg: 'blue' },
-      label: { fg: 'white', bold: true },
-      focus: {
-        border: { fg: 'cyan' },
-      },
+      border: { fg: 'gray' },
+      label: { fg: 'gray' },
     },
     keys: true,
     mouse: true,
@@ -64,7 +58,7 @@ export function createLayout(): Layout {
     alwaysScroll: true,
     scrollbar: {
       ch: '│',
-      style: { fg: 'blue' },
+      style: { fg: 'gray' },
     },
   });
 
@@ -77,11 +71,8 @@ export function createLayout(): Layout {
     border: { type: 'line' },
     label: ' Content ',
     style: {
-      border: { fg: 'blue' },
-      label: { fg: 'white', bold: true },
-      focus: {
-        border: { fg: 'cyan' },
-      },
+      border: { fg: 'gray' },
+      label: { fg: 'gray' },
     },
     keys: true,
     mouse: true,
@@ -89,7 +80,7 @@ export function createLayout(): Layout {
     alwaysScroll: true,
     scrollbar: {
       ch: '│',
-      style: { fg: 'blue' },
+      style: { fg: 'gray' },
     },
     tags: true,
     wrap: true,

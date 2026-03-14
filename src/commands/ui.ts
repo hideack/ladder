@@ -97,17 +97,19 @@ export async function cmdUi(): Promise<void> {
     screen.render();
   }
 
+  // フォーカス中ペインは白枠、非フォーカスはグレー枠
   function updateFocus(): void {
-    if (focus === 'feed') {
-      feedPane.focus();
-    } else if (focus === 'entry') {
-      entryPane.focus();
-    } else {
-      contentPane.focus();
+    const paneMap = { feed: feedPane, entry: entryPane, content: contentPane };
+    for (const [name, pane] of Object.entries(paneMap) as [string, blessed.Widgets.BoxElement][]) {
+      const active = name === focus;
+      (pane.style as Record<string, unknown>).border = { fg: active ? 'white' : 'gray' };
+      (pane.style as Record<string, unknown>).label  = { fg: active ? 'white' : 'gray', bold: active };
+      if (active) pane.focus();
     }
     screen.render();
   }
 
+  // 記事を既読にして右ペインに表示
   function openSelectedEntry(): void {
     const entry = entryList.getSelected();
     if (!entry) return;
@@ -117,6 +119,20 @@ export async function cmdUi(): Promise<void> {
     const feedRecord = entry.feed_id ? q.getFeedById(entry.feed_id) : undefined;
     const entryWithFeed = { ...entry, feed_title: feedRecord?.title ?? '' };
     entryView.show(entryWithFeed);
+  }
+
+  // 既読にせず右ペインにプレビュー表示
+  function previewSelectedEntry(): void {
+    const entry = entryList.getSelected();
+    if (!entry) return;
+    const feedRecord = entry.feed_id ? q.getFeedById(entry.feed_id) : undefined;
+    entryView.show({ ...entry, feed_title: feedRecord?.title ?? '' });
+  }
+
+  // フィードのエントリーを読み込んで先頭をプレビュー
+  function loadFeedEntries(feedId: number): void {
+    entryList.loadFeed(feedId);
+    previewSelectedEntry();
   }
 
   // Tab: cycle focus forward
@@ -215,11 +231,29 @@ export async function cmdUi(): Promise<void> {
   feedPane.key(['j', 'down'], () => {
     if (focus !== 'feed') return;
     feedList.moveDown();
+    // カーソル移動に連動してエントリーペインを更新
+    const sel = feedList.getSelected();
+    if (sel?.type === 'feed' && sel.feed) {
+      entryList.loadFeed(sel.feed.id);
+      previewSelectedEntry();
+    } else if (sel?.type === 'pinned') {
+      entryList.loadPinned();
+      previewSelectedEntry();
+    }
   });
 
   feedPane.key(['k', 'up'], () => {
     if (focus !== 'feed') return;
     feedList.moveUp();
+    // カーソル移動に連動してエントリーペインを更新
+    const sel = feedList.getSelected();
+    if (sel?.type === 'feed' && sel.feed) {
+      entryList.loadFeed(sel.feed.id);
+      previewSelectedEntry();
+    } else if (sel?.type === 'pinned') {
+      entryList.loadPinned();
+      previewSelectedEntry();
+    }
   });
 
   feedPane.key(['enter', 'space'], () => {
@@ -231,10 +265,11 @@ export async function cmdUi(): Promise<void> {
       feedList.toggleCollapse();
     } else if (selected.type === 'pinned') {
       entryList.loadPinned();
+      previewSelectedEntry();
       focus = 'entry';
       updateFocus();
     } else if (selected.type === 'feed' && selected.feed) {
-      entryList.loadFeed(selected.feed.id);
+      loadFeedEntries(selected.feed.id);
       focus = 'entry';
       updateFocus();
     }
