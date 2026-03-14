@@ -181,7 +181,7 @@ export class Queries {
         JOIN entries e ON e.id = entries_fts.rowid
         JOIN feeds f ON f.id = e.feed_id
         WHERE entries_fts MATCH ?
-        ORDER BY rank
+        ORDER BY e.published_at DESC, e.fetched_at DESC
         LIMIT ?
       `)
       .all(query, limit) as Array<Entry & { feed_title: string; snippet: string }>;
