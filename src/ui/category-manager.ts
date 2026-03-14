@@ -58,7 +58,7 @@ export function showCategoryManager(
 
   function resetStatus(): void {
     setStatus(
-      ' {bold}a{/bold}:追加  {bold}r{/bold}:リネーム  {bold}d{/bold}:削除  {bold}Esc/q{/bold}:閉じる'
+      ' {bold}a{/bold}:追加  {bold}r{/bold}:リネーム  {bold}d{/bold}:削除  {bold}J/K{/bold}:順序変更  {bold}Esc/q{/bold}:閉じる'
     );
   }
 
@@ -131,10 +131,10 @@ export function showCategoryManager(
       return;
     }
 
-    if (key.name === 'up') {
+    if (key.name === 'up' || ch === 'k') {
       selectedIndex = Math.max(0, selectedIndex - 1);
       render();
-    } else if (key.name === 'down') {
+    } else if (key.name === 'down' || ch === 'j') {
       selectedIndex = Math.min(Math.max(categories.length - 1, 0), selectedIndex + 1);
       render();
     } else if (ch === 'a') {
@@ -162,6 +162,24 @@ export function showCategoryManager(
           resetStatus();
         }
       };
+    } else if (ch === 'J') {
+      // 選択中カテゴリを1つ下へ移動
+      if (categories.length > 1 && selectedIndex < categories.length - 1) {
+        [categories[selectedIndex], categories[selectedIndex + 1]] =
+          [categories[selectedIndex + 1], categories[selectedIndex]];
+        categories.forEach((cat, i) => q.setCategorySortOrder(cat.id, i * 10));
+        selectedIndex++;
+        loadAndRender();
+      }
+    } else if (ch === 'K') {
+      // 選択中カテゴリを1つ上へ移動
+      if (categories.length > 1 && selectedIndex > 0) {
+        [categories[selectedIndex], categories[selectedIndex - 1]] =
+          [categories[selectedIndex - 1], categories[selectedIndex]];
+        categories.forEach((cat, i) => q.setCategorySortOrder(cat.id, i * 10));
+        selectedIndex--;
+        loadAndRender();
+      }
     } else if (key.name === 'escape' || ch === 'q') {
       screen.removeListener('keypress', onKeypress);
       overlay.destroy();

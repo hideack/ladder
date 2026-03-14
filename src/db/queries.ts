@@ -66,6 +66,10 @@ export class Queries {
     this.db.prepare('DELETE FROM categories WHERE id = ?').run(id);
   }
 
+  setCategorySortOrder(id: number, sortOrder: number): void {
+    this.db.prepare('UPDATE categories SET sort_order = ? WHERE id = ?').run(sortOrder, id);
+  }
+
   // ── Feeds ───────────────────────────────────────────────────────────────────
 
   getAllFeeds(): Feed[] {
