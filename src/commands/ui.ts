@@ -391,7 +391,7 @@ export async function cmdUi(): Promise<void> {
     if (!entry) return;
     entryList.togglePinSelected();
     feedList.refresh();
-    setStatus(entry.is_pinned ? 'Unpinned' : 'Pinned');
+    setStatus(entry.is_pinned ? 'Pinned' : 'Unpinned');
     setTimeout(() => resetStatus(), 1500);
   });
 
