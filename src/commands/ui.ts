@@ -7,6 +7,8 @@ import { createLayout } from '../ui/layout.js';
 import { FeedList } from '../ui/feed-list.js';
 import { EntryList } from '../ui/entry-list.js';
 import { EntryView } from '../ui/entry-view.js';
+import { showCategoryPicker } from '../ui/category-picker.js';
+import { showCategoryManager } from '../ui/category-manager.js';
 
 export async function cmdUi(): Promise<void> {
   const db = openDb();
@@ -23,6 +25,7 @@ export async function cmdUi(): Promise<void> {
   let focus: 'feed' | 'entry' | 'content' = 'feed';
   let searchMode = false;
   let helpVisible = false;
+  let modalOpen = false;
 
   function showHelp(): void {
     if (helpVisible) return;
@@ -68,6 +71,8 @@ export async function cmdUi(): Promise<void> {
         '  {bold}s{/bold}          ソート切替 (未読数 ↔ 最新記事)',
         '  {bold}H{/bold}          フィルター切替 (active→unread→all)',
         '  {bold}d{/bold}          フィード購読解除',
+        '  {bold}a{/bold}          カテゴリ割り当て',
+        '  {bold}C{/bold}          カテゴリマネージャー',
         '',
         ' {bold}{cyan-fg}── 全ペイン共通 (追加) ─────────────────{/cyan-fg}{/bold}',
         '  {bold}c{/bold}          ピン留めトグル',
@@ -97,7 +102,7 @@ export async function cmdUi(): Promise<void> {
 
   function resetStatus(): void {
     statusBar.setContent(
-      ' {bold}n/p{/bold}:feed  {bold}j/k{/bold}:entry  {bold}Spc/b{/bold}:read  {bold}o{/bold}:browser  {bold}c{/bold}:pin  {bold}m{/bold}:read-all  {bold}/{/bold}:search  {bold}?{/bold}:help  {bold}q{/bold}:quit'
+      ' {bold}n/p{/bold}:feed  {bold}j/k{/bold}:entry  {bold}Spc/b{/bold}:read  {bold}o{/bold}:browser  {bold}c{/bold}:pin  {bold}a{/bold}:category  {bold}C{/bold}:cat-mgr  {bold}/{/bold}:search  {bold}?{/bold}:help  {bold}q{/bold}:quit'
     );
     screen.render();
   }
@@ -142,7 +147,7 @@ export async function cmdUi(): Promise<void> {
 
   // Tab: cycle focus forward
   screen.key(['tab'], () => {
-    if (searchMode) return;
+    if (searchMode || modalOpen) return;
     if (focus === 'feed') focus = 'entry';
     else if (focus === 'entry') focus = 'content';
     else focus = 'feed';
@@ -151,7 +156,7 @@ export async function cmdUi(): Promise<void> {
 
   // Shift+Tab: cycle focus backward
   screen.key(['S-tab'], () => {
-    if (searchMode) return;
+    if (searchMode || modalOpen) return;
     if (focus === 'feed') focus = 'content';
     else if (focus === 'content') focus = 'entry';
     else focus = 'feed';
@@ -160,20 +165,20 @@ export async function cmdUi(): Promise<void> {
 
   // Help
   screen.key(['?'], () => {
-    if (searchMode) return;
+    if (searchMode || modalOpen) return;
     showHelp();
   });
 
   // Quit
   screen.key(['q', 'C-c'], () => {
-    if (searchMode) return;
+    if (searchMode || modalOpen) return;
     screen.destroy();
     process.exit(0);
   });
 
   // Search
   screen.key(['/'], () => {
-    if (searchMode) return;
+    if (searchMode || modalOpen) return;
     searchMode = true;
     let query = '';
     setStatus('Search: ▋');
@@ -212,7 +217,7 @@ export async function cmdUi(): Promise<void> {
 
   // Reload current feed
   screen.key(['r'], async () => {
-    if (searchMode) return;
+    if (searchMode || modalOpen) return;
     const feedId = feedList.getSelectedFeedId();
     if (feedId == null || feedId === -1) return;
     const feedTitle = feedList.getSelectedFeed()?.title ?? `#${feedId}`;
@@ -227,7 +232,7 @@ export async function cmdUi(): Promise<void> {
 
   // Reload all feeds
   screen.key(['S-r'], async () => {
-    if (searchMode) return;
+    if (searchMode || modalOpen) return;
     setStatus('Reloading all feeds...');
     await crawlFeed(db, undefined, {
       onProgress: (current, total, feedTitle) => {
@@ -292,7 +297,7 @@ export async function cmdUi(): Promise<void> {
   // s: ソート切り替え（未読数 ↔ 最新記事日時）
   // s: ソート切り替えはグローバルキーで確実に捕捉
   screen.key(['s'], () => {
-    if (searchMode || focus !== 'feed') return;
+    if (searchMode || modalOpen || focus !== 'feed') return;
     feedList.toggleSort();
     setStatus(`Sort: ${feedList.sortMode === 'unread' ? 'unread count' : 'latest entry'}`);
     setTimeout(() => resetStatus(), 1500);
@@ -300,7 +305,7 @@ export async function cmdUi(): Promise<void> {
 
   // H: フィルターモードを循環 (active → unread → all → active)
   screen.key(['S-h'], () => {
-    if (searchMode || focus !== 'feed') return;
+    if (searchMode || modalOpen || focus !== 'feed') return;
     feedList.cycleFilter();
     const label =
       feedList.filterMode === 'active' ? '未読 & 180日以内' :
@@ -310,7 +315,7 @@ export async function cmdUi(): Promise<void> {
   });
 
   screen.key(['d'], () => {
-    if (searchMode || focus !== 'feed') return;
+    if (searchMode || modalOpen || focus !== 'feed') return;
     const feed = feedList.getSelectedFeed();
     if (!feed) return;
 
@@ -327,6 +332,50 @@ export async function cmdUi(): Promise<void> {
         resetStatus();
       }
     });
+  });
+
+  // C (S-c): カテゴリマネージャーを開く（全ペイン共通）
+  screen.key(['S-c'], () => {
+    if (searchMode || modalOpen) return;
+    modalOpen = true;
+    showCategoryManager(screen, q, () => {
+      setImmediate(() => {
+        modalOpen = false;
+        feedList.refresh();
+        resetStatus();
+      });
+    });
+  });
+
+  // a: 選択中フィードにカテゴリを割り当てる（Feeds ペインのみ）
+  screen.key(['a'], () => {
+    if (searchMode || modalOpen || focus !== 'feed') return;
+    const feed = feedList.getSelectedFeed();
+    if (!feed) return;
+    modalOpen = true;
+    showCategoryPicker(
+      screen,
+      q,
+      feed.category_id,
+      (categoryId) => {
+        q.moveFeedToCategory(feed.id, categoryId);
+        setImmediate(() => {
+          modalOpen = false;
+          feedList.refresh();
+          const catName = categoryId != null
+            ? (q.getCategories().find((c) => c.id === categoryId)?.name ?? String(categoryId))
+            : 'なし';
+          setStatus(`カテゴリ変更: "${feed.title}" → ${catName}`);
+          setTimeout(() => resetStatus(), 2000);
+        });
+      },
+      () => {
+        setImmediate(() => {
+          modalOpen = false;
+          resetStatus();
+        });
+      }
+    );
   });
 
   // ── Entry pane keys ───────────────────────────────────────────────────────
@@ -351,7 +400,7 @@ export async function cmdUi(): Promise<void> {
   // n/p: フォーカスに関わらず常にフィードカーソルを移動
   // 移動前に refresh して現在の表示リスト（hideNoUnread 反映済み）を使う
   screen.key(['n'], () => {
-    if (searchMode) return;
+    if (searchMode || modalOpen) return;
     feedList.refresh();
     feedList.moveDown();
     const sel = feedList.getSelected();
@@ -365,7 +414,7 @@ export async function cmdUi(): Promise<void> {
   });
 
   screen.key(['p'], () => {
-    if (searchMode) return;
+    if (searchMode || modalOpen) return;
     feedList.refresh();
     feedList.moveUp();
     const sel = feedList.getSelected();
@@ -380,13 +429,13 @@ export async function cmdUi(): Promise<void> {
 
   // j/k: フォーカスに関わらず常にエントリーカーソルを移動
   screen.key(['j'], () => {
-    if (searchMode) return;
+    if (searchMode || modalOpen) return;
     entryList.moveDown();
     openSelectedEntry();
   });
 
   screen.key(['k'], () => {
-    if (searchMode) return;
+    if (searchMode || modalOpen) return;
     entryList.moveUp();
     openSelectedEntry();
   });
@@ -399,7 +448,7 @@ export async function cmdUi(): Promise<void> {
 
   // c: フォーカスに関わらず選択中記事のピン留めをトグル
   screen.key(['c'], () => {
-    if (searchMode) return;
+    if (searchMode || modalOpen) return;
     const entry = entryList.getSelected();
     if (!entry) return;
     entryList.togglePinSelected();
@@ -416,7 +465,7 @@ export async function cmdUi(): Promise<void> {
 
   // m: フォーカスに関わらず選択中フィードの全記事を既読にし、次のフィードへ移動
   screen.key(['m'], () => {
-    if (searchMode) return;
+    if (searchMode || modalOpen) return;
     const feedId = entryList.getCurrentFeedId();
     if (feedId == null) return;
     entryList.markAllAsRead();
@@ -476,7 +525,7 @@ export async function cmdUi(): Promise<void> {
 
   // o: ブラウザで開く（どのペインからでも）
   screen.key(['o'], () => {
-    if (searchMode) return;
+    if (searchMode || modalOpen) return;
     openInBrowser();
   });
 
@@ -530,7 +579,7 @@ export async function cmdUi(): Promise<void> {
 
   // b: 逆方向ページ送り（端末はShift+Spaceを区別できないため b を使用）
   screen.key(['b'], () => {
-    if (searchMode) return;
+    if (searchMode || modalOpen) return;
 
     if (focus === 'content') {
       if (!isContentAtTop()) {
@@ -551,7 +600,7 @@ export async function cmdUi(): Promise<void> {
   });
 
   screen.key(['space'], () => {
-    if (searchMode) return;
+    if (searchMode || modalOpen) return;
     if (focus === 'content') {
       if (!isContentAtBottom()) {
         entryView.scrollPage();
