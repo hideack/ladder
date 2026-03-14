@@ -387,10 +387,15 @@ export async function cmdUi(): Promise<void> {
     feedList.refresh();
   });
 
-  entryPane.key(['m'], () => {
-    if (focus !== 'entry') return;
+  // m: フォーカスに関わらず選択中フィードの全記事を既読にする
+  screen.key(['m'], () => {
+    if (searchMode) return;
+    const feedId = entryList.getCurrentFeedId();
+    if (feedId == null) return;
     entryList.markAllAsRead();
     feedList.refresh();
+    setStatus('Marked all as read');
+    setTimeout(() => resetStatus(), 1500);
   });
 
   function openInBrowser(): void {
