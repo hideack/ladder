@@ -114,6 +114,20 @@ export class EntryList {
     return this.getSelected();
   }
 
+  movePageDown(): Entry | null {
+    const pageSize = Math.max(1, (this.pane.height as number) - 2);
+    this.selectedIndex = Math.min(this.entries.length - 1, this.selectedIndex + pageSize);
+    this.render();
+    return this.getSelected();
+  }
+
+  movePageUp(): Entry | null {
+    const pageSize = Math.max(1, (this.pane.height as number) - 2);
+    this.selectedIndex = Math.max(0, this.selectedIndex - pageSize);
+    this.render();
+    return this.getSelected();
+  }
+
   nextUnread(): Entry | null {
     for (let i = this.selectedIndex + 1; i < this.entries.length; i++) {
       if (!this.entries[i].is_read) {
