@@ -332,7 +332,9 @@ export async function cmdUi(): Promise<void> {
   });
 
   // n/p: フォーカスに関わらず常にフィードカーソルを移動
+  // 移動前に refresh して現在の表示リスト（hideNoUnread 反映済み）を使う
   screen.key(['n'], () => {
+    feedList.refresh();
     feedList.moveDown();
     const sel = feedList.getSelected();
     if (sel?.type === 'feed' && sel.feed) {
@@ -345,6 +347,7 @@ export async function cmdUi(): Promise<void> {
   });
 
   screen.key(['p'], () => {
+    feedList.refresh();
     feedList.moveUp();
     const sel = feedList.getSelected();
     if (sel?.type === 'feed' && sel.feed) {

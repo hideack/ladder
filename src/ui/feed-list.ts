@@ -34,6 +34,8 @@ export class FeedList {
     const feeds = this.q.getAllFeedsWithLatest();
     const categories = this.q.getCategories();
     this.items = this.buildItems(feeds, categories);
+    // items が縮んだ場合にインデックスを有効範囲に収める
+    this.selectedIndex = Math.min(this.selectedIndex, Math.max(0, this.items.length - 1));
     this.render();
   }
 
