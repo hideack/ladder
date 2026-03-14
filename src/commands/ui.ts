@@ -276,22 +276,23 @@ export async function cmdUi(): Promise<void> {
   });
 
   // s: ソート切り替え（未読数 ↔ 最新記事日時）
-  feedPane.key(['s'], () => {
+  // s: ソート切り替えはグローバルキーで確実に捕捉
+  screen.key(['s'], () => {
     if (focus !== 'feed') return;
     feedList.toggleSort();
     setStatus(`Sort: ${feedList.sortMode === 'unread' ? 'unread count' : 'latest entry'}`);
     setTimeout(() => resetStatus(), 1500);
   });
 
-  // H: 未読なしを非表示トグル
-  feedPane.key(['H'], () => {
+  // H: 未読なし非表示トグルもグローバルキーで確実に捕捉
+  screen.key(['H'], () => {
     if (focus !== 'feed') return;
     feedList.toggleHideNoUnread();
     setStatus(`Hide no-unread: ${feedList.hideNoUnread ? 'ON' : 'OFF'}`);
     setTimeout(() => resetStatus(), 1500);
   });
 
-  feedPane.key(['d'], () => {
+  screen.key(['d'], () => {
     if (focus !== 'feed') return;
     const feed = feedList.getSelectedFeed();
     if (!feed) return;
