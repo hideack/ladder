@@ -33,7 +33,7 @@ export async function cmdUi(): Promise<void> {
       top: 'center',
       left: 'center',
       width: 58,
-      height: 29,
+      height: 32,
       border: { type: 'line' },
       label: ' Help — any key to close ',
       tags: true,
@@ -69,11 +69,13 @@ export async function cmdUi(): Promise<void> {
         '  {bold}H{/bold}          未読なしフィードを非表示トグル',
         '  {bold}d{/bold}          フィード購読解除',
         '',
+        ' {bold}{cyan-fg}── 全ペイン共通 (追加) ─────────────────{/cyan-fg}{/bold}',
+        '  {bold}c{/bold}          ピン留めトグル',
+        '  {bold}m{/bold}          フィード全件既読 → 次フィードへ',
+        '',
         ' {bold}{green-fg}── Entries ペイン ──────────────────────{/green-fg}{/bold}',
         '  {bold}↓ / ↑{/bold}      記事移動 (自動既読)',
-        '  {bold}P{/bold}          ピン留めトグル',
         '  {bold}u{/bold}          未読/既読トグル',
-        '  {bold}m{/bold}          フィード全件既読',
         '  {bold}v{/bold}          ブラウザで開く',
         '',
       ].join('\n'),
@@ -95,7 +97,7 @@ export async function cmdUi(): Promise<void> {
 
   function resetStatus(): void {
     statusBar.setContent(
-      ' {bold}n/p{/bold}:feed  {bold}j/k{/bold}:entry  {bold}Spc/b{/bold}:read  {bold}o{/bold}:browser  {bold}/{/bold}:search  {bold}r{/bold}:reload  {bold}Tab{/bold}:focus  {bold}?{/bold}:help  {bold}q{/bold}:quit'
+      ' {bold}n/p{/bold}:feed  {bold}j/k{/bold}:entry  {bold}Spc/b{/bold}:read  {bold}o{/bold}:browser  {bold}c{/bold}:pin  {bold}m{/bold}:read-all  {bold}/{/bold}:search  {bold}?{/bold}:help  {bold}q{/bold}:quit'
     );
     screen.render();
   }

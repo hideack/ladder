@@ -98,7 +98,7 @@ export function createLayout(): Layout {
       fg: 'white',
     },
     content:
-      ' {bold}n/p{/bold}:feed  {bold}j/k{/bold}:entry  {bold}Spc/b{/bold}:read  {bold}o{/bold}:browser  {bold}/{/bold}:search  {bold}r{/bold}:reload  {bold}Tab{/bold}:focus  {bold}?{/bold}:help  {bold}q{/bold}:quit',
+      ' {bold}n/p{/bold}:feed  {bold}j/k{/bold}:entry  {bold}Spc/b{/bold}:read  {bold}o{/bold}:browser  {bold}c{/bold}:pin  {bold}m{/bold}:read-all  {bold}/{/bold}:search  {bold}?{/bold}:help  {bold}q{/bold}:quit',
   });
 
   return { screen, feedPane, entryPane, contentPane, statusBar };
