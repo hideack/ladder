@@ -13,6 +13,13 @@ interface CrawlResult {
   errors: Array<{ feed_id: number; message: string }>;
 }
 
+export interface CrawlOptions {
+  /** フィード1件の処理開始時に呼ばれる */
+  onProgress?: (current: number, total: number, feedTitle: string) => void;
+  /** スキップ・エラー等のログメッセージ */
+  onLog?: (level: 'info' | 'warn' | 'error', message: string) => void;
+}
+
 const parser = new RSSParser({
   timeout: TIMEOUT_MS,
   customFields: {
@@ -25,28 +32,41 @@ const parser = new RSSParser({
 
 export async function crawlFeed(
   db: Database.Database,
-  feedId?: number
+  feedId?: number,
+  options: CrawlOptions = {}
 ): Promise<CrawlResult> {
+  const { onProgress, onLog } = options;
+  const log = (level: 'info' | 'warn' | 'error', msg: string) => {
+    if (onLog) onLog(level, msg);
+    else process.stderr.write(`[${level}] ${msg}\n`);
+  };
+
   const q = new Queries(db);
   const feeds = feedId != null ? [q.getFeedById(feedId)].filter(Boolean) : q.getAllFeeds();
+  const total = feeds.filter(Boolean).length;
+  let current = 0;
 
   const result: CrawlResult = { fetched: 0, newEntries: 0, errors: [] };
 
   for (const feed of feeds) {
     if (!feed) continue;
 
+    current++;
     const now = Math.floor(Date.now() / 1000);
 
     if (feed.error_count >= MAX_ERROR_COUNT) {
       // 次回リトライ時刻が未来なら休止中 → スキップ
       if (feed.next_retry_at != null && now < feed.next_retry_at) {
         const retryDate = new Date(feed.next_retry_at * 1000).toISOString().slice(0, 10);
-        process.stderr.write(`[skip] feed #${feed.id} "${feed.title}" suspended until ${retryDate}\n`);
+        log('info', `feed #${feed.id} "${feed.title}" suspended until ${retryDate}`);
+        onProgress?.(current, total, `[skip] ${feed.title}`);
         continue;
       }
       // リトライ時刻が来た (または未設定) → 1ヶ月ぶりのリトライを試みる
-      process.stderr.write(`[retry] feed #${feed.id} "${feed.title}" monthly retry\n`);
+      log('info', `feed #${feed.id} "${feed.title}" monthly retry`);
     }
+
+    onProgress?.(current, total, feed.title);
 
     try {
       const headers: Record<string, string> = {
@@ -140,10 +160,12 @@ export async function crawlFeed(
       if (newErrorCount >= MAX_ERROR_COUNT) {
         const nextRetry = now + RETRY_INTERVAL_SEC;
         const retryDate = new Date(nextRetry * 1000).toISOString().slice(0, 10);
-        process.stderr.write(`[error] feed #${feed.id} "${feed.title}": ${message} — suspended, next retry ${retryDate}\n`);
+        log('error', `feed #${feed.id} "${feed.title}": ${message} — suspended, next retry ${retryDate}`);
+        onProgress?.(current, total, `[error] ${feed.title}`);
         q.updateFeedMeta(feed.id, { error_count: newErrorCount, next_retry_at: nextRetry });
       } else {
-        process.stderr.write(`[error] feed #${feed.id} "${feed.title}": ${message} (${newErrorCount}/${MAX_ERROR_COUNT})\n`);
+        log('warn', `feed #${feed.id} "${feed.title}": ${message} (${newErrorCount}/${MAX_ERROR_COUNT})`);
+        onProgress?.(current, total, `[error] ${feed.title}`);
         q.updateFeedMeta(feed.id, { error_count: newErrorCount });
       }
       result.errors.push({ feed_id: feed.id, message });

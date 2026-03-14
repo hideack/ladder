@@ -215,8 +215,11 @@ export async function cmdUi(): Promise<void> {
     if (searchMode) return;
     const feedId = feedList.getSelectedFeedId();
     if (feedId == null || feedId === -1) return;
-    setStatus(`Reloading feed #${feedId}...`);
-    await crawlFeed(db, feedId);
+    const feedTitle = feedList.getSelectedFeed()?.title ?? `#${feedId}`;
+    setStatus(`Reloading: ${feedTitle}`);
+    await crawlFeed(db, feedId, {
+      onLog: () => { /* TUI内ではステータスラインに出すのでstderrへは何もしない */ },
+    });
     feedList.refresh();
     entryList.refresh();
     resetStatus();
@@ -226,7 +229,14 @@ export async function cmdUi(): Promise<void> {
   screen.key(['S-r'], async () => {
     if (searchMode) return;
     setStatus('Reloading all feeds...');
-    await crawlFeed(db);
+    await crawlFeed(db, undefined, {
+      onProgress: (current, total, feedTitle) => {
+        const pct = Math.round((current / total) * 100);
+        const bar = '█'.repeat(Math.floor(pct / 5)) + '░'.repeat(20 - Math.floor(pct / 5));
+        setStatus(` [${bar}] ${current}/${total}  ${feedTitle}`);
+      },
+      onLog: () => { /* TUI内ではステータスラインに集約するのでstderrへは何もしない */ },
+    });
     feedList.refresh();
     entryList.refresh();
     resetStatus();
