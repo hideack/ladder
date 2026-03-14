@@ -388,13 +388,24 @@ export async function cmdUi(): Promise<void> {
     feedList.refresh();
   });
 
-  // m: フォーカスに関わらず選択中フィードの全記事を既読にする
+  // m: フォーカスに関わらず選択中フィードの全記事を既読にし、次のフィードへ移動
   screen.key(['m'], () => {
     if (searchMode) return;
     const feedId = entryList.getCurrentFeedId();
     if (feedId == null) return;
     entryList.markAllAsRead();
-    feedList.refresh();
+    feedList.refresh(); // 既読0になったフィードが消え、カーソルが次フィードへ移動
+
+    // 移動先のフィードをエントリー一覧にも反映
+    const sel = feedList.getSelected();
+    if (sel?.type === 'feed' && sel.feed) {
+      entryList.loadFeed(sel.feed.id);
+      previewSelectedEntry();
+    } else if (sel?.type === 'pinned') {
+      entryList.loadPinned();
+      previewSelectedEntry();
+    }
+
     setStatus('Marked all as read');
     setTimeout(() => resetStatus(), 1500);
   });
