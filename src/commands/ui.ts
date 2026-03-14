@@ -56,10 +56,11 @@ export async function cmdUi(): Promise<void> {
         '  {bold}?{/bold}          このヘルプを表示/閉じる',
         '',
         ' {bold}{cyan-fg}── Feeds ペイン ────────────────────────{/cyan-fg}{/bold}',
-        '  {bold}j / ↓{/bold}      次のフィード/カテゴリへ',
-        '  {bold}k / ↑{/bold}      前のフィード/カテゴリへ',
+        '  {bold}j/k / ↓↑{/bold}  次/前のフィード・カテゴリへ',
+        '  {bold}n / p{/bold}      次/前のフィードへ (全ペイン共通)',
         '  {bold}Enter{/bold}      フィード選択 / カテゴリ折りたたみ',
         '  {bold}Space{/bold}      未読記事を順に読む (全ペイン共通)',
+        '  {bold}o / v{/bold}      ブラウザで開く (全ペイン / Entries)',
         '  {bold}s{/bold}          ソート切替 (未読数 ↔ 最新記事)',
         '  {bold}H{/bold}          未読なしフィードを非表示トグル',
         '  {bold}d{/bold}          フィード購読解除',
@@ -67,12 +68,11 @@ export async function cmdUi(): Promise<void> {
         ' {bold}{green-fg}── Entries ペイン ──────────────────────{/green-fg}{/bold}',
         '  {bold}j / ↓{/bold}      次の記事へ (自動既読)',
         '  {bold}k / ↑{/bold}      前の記事へ',
-        '  {bold}n{/bold}          次の未読記事へ',
-        '  {bold}p{/bold}          前の未読記事へ',
+        '  {bold}n / p{/bold}      次/前の未読記事へ',
         '  {bold}P{/bold}          ピン留めトグル',
         '  {bold}u{/bold}          未読/既読トグル',
         '  {bold}m{/bold}          フィード全件既読',
-        '  {bold}v{/bold}          ブラウザで開く',
+        '  {bold}v / o{/bold}      ブラウザで開く',
         '',
       ].join('\n'),
     });
@@ -332,16 +332,39 @@ export async function cmdUi(): Promise<void> {
     openSelectedEntry();
   });
 
-  entryPane.key(['n'], () => {
-    if (focus !== 'entry') return;
-    const next = entryList.nextUnread();
-    if (next) openSelectedEntry();
+  // n/p はグローバルで処理（フィードペインではフィード移動、エントリーペインでは未読移動）
+  screen.key(['n'], () => {
+    if (focus === 'feed') {
+      feedList.moveDown();
+      const sel = feedList.getSelected();
+      if (sel?.type === 'feed' && sel.feed) {
+        entryList.loadFeed(sel.feed.id);
+        previewSelectedEntry();
+      } else if (sel?.type === 'pinned') {
+        entryList.loadPinned();
+        previewSelectedEntry();
+      }
+    } else if (focus === 'entry') {
+      const next = entryList.nextUnread();
+      if (next) openSelectedEntry();
+    }
   });
 
-  entryPane.key(['p'], () => {
-    if (focus !== 'entry') return;
-    const prev = entryList.prevUnread();
-    if (prev) openSelectedEntry();
+  screen.key(['p'], () => {
+    if (focus === 'feed') {
+      feedList.moveUp();
+      const sel = feedList.getSelected();
+      if (sel?.type === 'feed' && sel.feed) {
+        entryList.loadFeed(sel.feed.id);
+        previewSelectedEntry();
+      } else if (sel?.type === 'pinned') {
+        entryList.loadPinned();
+        previewSelectedEntry();
+      }
+    } else if (focus === 'entry') {
+      const prev = entryList.prevUnread();
+      if (prev) openSelectedEntry();
+    }
   });
 
   entryPane.key(['S-p'], () => {
@@ -362,8 +385,7 @@ export async function cmdUi(): Promise<void> {
     feedList.refresh();
   });
 
-  entryPane.key(['v'], () => {
-    if (focus !== 'entry') return;
+  function openInBrowser(): void {
     const entry = entryList.getSelected();
     if (!entry?.url) return;
     try {
@@ -379,6 +401,16 @@ export async function cmdUi(): Promise<void> {
       setStatus(`Could not open: ${entry.url}`);
       setTimeout(() => resetStatus(), 2000);
     }
+  }
+
+  entryPane.key(['v'], () => {
+    if (focus !== 'entry') return;
+    openInBrowser();
+  });
+
+  // o: ブラウザで開く（どのペインからでも）
+  screen.key(['o'], () => {
+    openInBrowser();
   });
 
   // ── Space: sequential unread reading ──────────────────────────────────────
