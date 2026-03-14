@@ -139,6 +139,7 @@ export async function cmdUi(): Promise<void> {
 
   // Tab: cycle focus forward
   screen.key(['tab'], () => {
+    if (searchMode) return;
     if (focus === 'feed') focus = 'entry';
     else if (focus === 'entry') focus = 'content';
     else focus = 'feed';
@@ -147,6 +148,7 @@ export async function cmdUi(): Promise<void> {
 
   // Shift+Tab: cycle focus backward
   screen.key(['S-tab'], () => {
+    if (searchMode) return;
     if (focus === 'feed') focus = 'content';
     else if (focus === 'content') focus = 'entry';
     else focus = 'feed';
@@ -155,61 +157,59 @@ export async function cmdUi(): Promise<void> {
 
   // Help
   screen.key(['?'], () => {
+    if (searchMode) return;
     showHelp();
   });
 
   // Quit
   screen.key(['q', 'C-c'], () => {
+    if (searchMode) return;
     screen.destroy();
     process.exit(0);
-  });
-
-  // Escape: exit search
-  screen.key(['escape'], () => {
-    if (searchMode) {
-      searchMode = false;
-      resetStatus();
-    }
   });
 
   // Search
   screen.key(['/'], () => {
     if (searchMode) return;
     searchMode = true;
-    setStatus('Search: ');
+    let query = '';
+    setStatus('Search: ▋');
 
-    // Use readline-style input via a prompt box
-    const prompt = (screen as unknown as { readInput: (label: string, value: string, cb: (err: Error | null, val: string) => void) => void }).readInput;
-    if (prompt) {
-      prompt.call(screen, 'Search:', '', (err: Error | null, val: string) => {
+    function onKeypress(ch: string, key: { name: string; sequence: string; ctrl: boolean }): void {
+      if (key.name === 'enter') {
+        screen.removeListener('keypress', onKeypress);
         searchMode = false;
-        if (err || !val) { resetStatus(); return; }
-        entryList.loadSearch(val);
-        focus = 'entry';
-        updateFocus();
-        resetStatus();
-      });
-    } else {
-      // Fallback: simple input box
-      const inputBox = (screen as unknown as { question: (label: string, cb: (err: Error | null, val: string) => void) => void }).question;
-      if (inputBox) {
-        inputBox.call(screen, 'Search: ', (err: Error | null, val: string) => {
-          searchMode = false;
-          if (err || !val) { resetStatus(); return; }
-          entryList.loadSearch(val);
+        if (query.trim()) {
+          entryList.loadSearch(query.trim());
           focus = 'entry';
           updateFocus();
-          resetStatus();
-        });
-      } else {
+        }
+        resetStatus();
+        return;
+      }
+      if (key.name === 'escape') {
+        screen.removeListener('keypress', onKeypress);
         searchMode = false;
         resetStatus();
+        return;
+      }
+      if (key.name === 'backspace') {
+        query = query.slice(0, -1);
+        setStatus(`Search: ${query}▋`);
+        return;
+      }
+      if (ch && !key.ctrl && ch.length === 1) {
+        query += ch;
+        setStatus(`Search: ${query}▋`);
       }
     }
+
+    screen.on('keypress', onKeypress);
   });
 
   // Reload current feed
   screen.key(['r'], async () => {
+    if (searchMode) return;
     const feedId = feedList.getSelectedFeedId();
     if (feedId == null || feedId === -1) return;
     setStatus(`Reloading feed #${feedId}...`);
@@ -221,6 +221,7 @@ export async function cmdUi(): Promise<void> {
 
   // Reload all feeds
   screen.key(['S-r'], async () => {
+    if (searchMode) return;
     setStatus('Reloading all feeds...');
     await crawlFeed(db);
     feedList.refresh();
@@ -278,7 +279,7 @@ export async function cmdUi(): Promise<void> {
   // s: ソート切り替え（未読数 ↔ 最新記事日時）
   // s: ソート切り替えはグローバルキーで確実に捕捉
   screen.key(['s'], () => {
-    if (focus !== 'feed') return;
+    if (searchMode || focus !== 'feed') return;
     feedList.toggleSort();
     setStatus(`Sort: ${feedList.sortMode === 'unread' ? 'unread count' : 'latest entry'}`);
     setTimeout(() => resetStatus(), 1500);
@@ -286,14 +287,14 @@ export async function cmdUi(): Promise<void> {
 
   // H: 未読なし非表示トグルもグローバルキーで確実に捕捉
   screen.key(['S-h'], () => {
-    if (focus !== 'feed') return;
+    if (searchMode || focus !== 'feed') return;
     feedList.toggleHideNoUnread();
     setStatus(`Hide no-unread: ${feedList.hideNoUnread ? 'ON' : 'OFF'}`);
     setTimeout(() => resetStatus(), 1500);
   });
 
   screen.key(['d'], () => {
-    if (focus !== 'feed') return;
+    if (searchMode || focus !== 'feed') return;
     const feed = feedList.getSelectedFeed();
     if (!feed) return;
 
@@ -334,6 +335,7 @@ export async function cmdUi(): Promise<void> {
   // n/p: フォーカスに関わらず常にフィードカーソルを移動
   // 移動前に refresh して現在の表示リスト（hideNoUnread 反映済み）を使う
   screen.key(['n'], () => {
+    if (searchMode) return;
     feedList.refresh();
     feedList.moveDown();
     const sel = feedList.getSelected();
@@ -347,6 +349,7 @@ export async function cmdUi(): Promise<void> {
   });
 
   screen.key(['p'], () => {
+    if (searchMode) return;
     feedList.refresh();
     feedList.moveUp();
     const sel = feedList.getSelected();
@@ -361,11 +364,13 @@ export async function cmdUi(): Promise<void> {
 
   // j/k: フォーカスに関わらず常にエントリーカーソルを移動
   screen.key(['j'], () => {
+    if (searchMode) return;
     entryList.moveDown();
     openSelectedEntry();
   });
 
   screen.key(['k'], () => {
+    if (searchMode) return;
     entryList.moveUp();
     openSelectedEntry();
   });
@@ -413,6 +418,7 @@ export async function cmdUi(): Promise<void> {
 
   // o: ブラウザで開く（どのペインからでも）
   screen.key(['o'], () => {
+    if (searchMode) return;
     openInBrowser();
   });
 
@@ -458,6 +464,7 @@ export async function cmdUi(): Promise<void> {
   }
 
   screen.key(['space'], () => {
+    if (searchMode) return;
     if (focus === 'content') {
       if (!isContentAtBottom()) {
         entryView.scrollPage();
