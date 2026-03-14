@@ -94,7 +94,7 @@ export function createLayout(): Layout {
     height: 1,
     tags: true,
     style: {
-      bg: 'blue',
+      bg: 'black',
       fg: 'white',
     },
     content:
