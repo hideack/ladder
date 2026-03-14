@@ -424,6 +424,13 @@ export async function cmdUi(): Promise<void> {
 
   // ── Space: sequential unread reading ──────────────────────────────────────
 
+  // コンテンツペインが先頭に達しているか判定
+  function isContentAtTop(): boolean {
+    const box = contentPane as unknown as { getScrollPerc(): number };
+    const scrollPerc = typeof box.getScrollPerc === 'function' ? box.getScrollPerc() : 0;
+    return scrollPerc <= 1;
+  }
+
   // コンテンツペインが末端に達しているか判定
   function isContentAtBottom(): boolean {
     const box = contentPane as unknown as { getScrollPerc(): number; getScrollHeight(): number };
@@ -462,6 +469,28 @@ export async function cmdUi(): Promise<void> {
       updateFocus();
     }
   }
+
+  // Shift+Space: 逆方向ページ送り
+  screen.key(['S-space'], () => {
+    if (searchMode) return;
+
+    if (focus === 'content') {
+      if (!isContentAtTop()) {
+        entryView.scrollPageUp();
+      } else {
+        // 先頭に達したら前のエントリーへ
+        entryList.moveUp();
+        openSelectedEntry();
+      }
+      return;
+    }
+
+    // コンテンツペイン以外: 前のエントリーを開いてコンテンツペインへ
+    entryList.moveUp();
+    openSelectedEntry();
+    focus = 'content';
+    updateFocus();
+  });
 
   screen.key(['space'], () => {
     if (searchMode) return;
