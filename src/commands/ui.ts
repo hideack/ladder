@@ -58,7 +58,8 @@ export async function cmdUi(): Promise<void> {
         ' {bold}{cyan-fg}── 全ペイン共通 ────────────────────────{/cyan-fg}{/bold}',
         '  {bold}n / p{/bold}      フィードカーソル 次/前へ',
         '  {bold}j / k{/bold}      エントリーカーソル 次/前へ (自動既読)',
-        '  {bold}Space{/bold}      未読記事を順に読む',
+        '  {bold}Space{/bold}      未読記事を順に読む (次へ)',
+        '  {bold}b{/bold}          逆方向ページ送り (前へ)',
         '  {bold}o{/bold}          ブラウザで開く',
         '',
         ' {bold}{cyan-fg}── Feeds ペイン ────────────────────────{/cyan-fg}{/bold}',
@@ -94,7 +95,7 @@ export async function cmdUi(): Promise<void> {
 
   function resetStatus(): void {
     statusBar.setContent(
-      ' {bold}n/p{/bold}:feed  {bold}j/k{/bold}:entry  {bold}Space{/bold}:read  {bold}o{/bold}:browser  {bold}/{/bold}:search  {bold}r{/bold}:reload  {bold}Tab{/bold}:focus  {bold}?{/bold}:help  {bold}q{/bold}:quit'
+      ' {bold}n/p{/bold}:feed  {bold}j/k{/bold}:entry  {bold}Spc/b{/bold}:read  {bold}o{/bold}:browser  {bold}/{/bold}:search  {bold}r{/bold}:reload  {bold}Tab{/bold}:focus  {bold}?{/bold}:help  {bold}q{/bold}:quit'
     );
     screen.render();
   }
@@ -475,8 +476,8 @@ export async function cmdUi(): Promise<void> {
     }
   }
 
-  // Shift+Space: 逆方向ページ送り
-  screen.key(['S-space'], () => {
+  // b: 逆方向ページ送り（端末はShift+Spaceを区別できないため b を使用）
+  screen.key(['b'], () => {
     if (searchMode) return;
 
     if (focus === 'content') {
