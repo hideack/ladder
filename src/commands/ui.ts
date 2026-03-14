@@ -33,7 +33,7 @@ export async function cmdUi(): Promise<void> {
       top: 'center',
       left: 'center',
       width: 58,
-      height: 28,
+      height: 29,
       border: { type: 'line' },
       label: ' Help — any key to close ',
       tags: true,
@@ -58,7 +58,8 @@ export async function cmdUi(): Promise<void> {
         ' {bold}{cyan-fg}── Feeds ペイン ────────────────────────{/cyan-fg}{/bold}',
         '  {bold}j / ↓{/bold}      次のフィード/カテゴリへ',
         '  {bold}k / ↑{/bold}      前のフィード/カテゴリへ',
-        '  {bold}Enter/Spc{/bold}  フィード選択 / カテゴリ折りたたみ',
+        '  {bold}Enter{/bold}      フィード選択 / カテゴリ折りたたみ',
+        '  {bold}Space{/bold}      未読記事を順に読む (全ペイン共通)',
         '  {bold}s{/bold}          ソート切替 (未読数 ↔ 最新記事)',
         '  {bold}H{/bold}          未読なしフィードを非表示トグル',
         '  {bold}d{/bold}          フィード購読解除',
@@ -256,7 +257,7 @@ export async function cmdUi(): Promise<void> {
     }
   });
 
-  feedPane.key(['enter', 'space'], () => {
+  feedPane.key(['enter'], () => {
     if (focus !== 'feed') return;
     const selected = feedList.getSelected();
     if (!selected) return;
@@ -326,7 +327,7 @@ export async function cmdUi(): Promise<void> {
     openSelectedEntry();
   });
 
-  entryPane.key(['enter', 'space'], () => {
+  entryPane.key(['enter'], () => {
     if (focus !== 'entry') return;
     openSelectedEntry();
   });
@@ -378,6 +379,81 @@ export async function cmdUi(): Promise<void> {
       setStatus(`Could not open: ${entry.url}`);
       setTimeout(() => resetStatus(), 2000);
     }
+  });
+
+  // ── Space: sequential unread reading ──────────────────────────────────────
+
+  // コンテンツペインが末端に達しているか判定
+  function isContentAtBottom(): boolean {
+    const box = contentPane as unknown as { getScrollPerc(): number; getScrollHeight(): number };
+    const scrollH = typeof box.getScrollHeight === 'function' ? box.getScrollHeight() : 0;
+    const innerH = (contentPane.height as number) - 2;
+    const scrollPerc = typeof box.getScrollPerc === 'function' ? box.getScrollPerc() : 0;
+    return scrollH <= innerH || scrollPerc >= 99;
+  }
+
+  // 次の未読エントリー（またはフィード）に進む
+  function advanceSpaceReading(): void {
+    // 現フィード内の次の未読へ
+    const next = entryList.nextUnread();
+    if (next) {
+      openSelectedEntry();
+      focus = 'content';
+      updateFocus();
+      return;
+    }
+
+    // 現フィードに未読なし → 次の未読フィードへ
+    const currentFeedId = entryList.getCurrentFeedId();
+    const nextFeed = feedList.getNextFeedWithUnread(currentFeedId);
+    if (!nextFeed) {
+      setStatus('No more unread entries');
+      setTimeout(() => resetStatus(), 2000);
+      return;
+    }
+
+    feedList.selectFeedById(nextFeed.id);
+    entryList.loadFeed(nextFeed.id);
+    const firstUnread = entryList.firstUnread();
+    if (firstUnread) {
+      openSelectedEntry();
+      focus = 'content';
+      updateFocus();
+    }
+  }
+
+  screen.key(['space'], () => {
+    if (focus === 'content') {
+      if (!isContentAtBottom()) {
+        entryView.scrollDown();
+      } else {
+        advanceSpaceReading();
+      }
+      return;
+    }
+
+    // コンテンツペイン以外: 現フィードの先頭未読を開いてコンテンツペインへ
+    const sel = feedList.getSelected();
+    if (sel?.type === 'feed' && sel.feed) {
+      if (entryList.getCurrentFeedId() !== sel.feed.id) {
+        entryList.loadFeed(sel.feed.id);
+      }
+      const firstUnread = entryList.firstUnread();
+      if (firstUnread) {
+        openSelectedEntry();
+        focus = 'content';
+        updateFocus();
+        return;
+      }
+    } else if (sel?.type === 'pinned') {
+      openSelectedEntry();
+      focus = 'content';
+      updateFocus();
+      return;
+    }
+
+    // 現フィードに未読なし → 次の未読フィードへ
+    advanceSpaceReading();
   });
 
   // ── Content pane keys ─────────────────────────────────────────────────────

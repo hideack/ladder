@@ -135,6 +135,17 @@ export class EntryList {
     return null;
   }
 
+  firstUnread(): Entry | null {
+    for (let i = 0; i < this.entries.length; i++) {
+      if (!this.entries[i].is_read) {
+        this.selectedIndex = i;
+        this.render();
+        return this.entries[i];
+      }
+    }
+    return null;
+  }
+
   getSelected(): Entry | null {
     return this.entries[this.selectedIndex] ?? null;
   }

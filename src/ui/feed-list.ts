@@ -219,4 +219,39 @@ export class FeedList {
     if (item?.type === 'category' && item.categoryId != null) return item.categoryId;
     return null;
   }
+
+  getNextFeedWithUnread(afterFeedId: number | null): (Feed & { latest_entry_at?: number | null }) | null {
+    if (afterFeedId == null) {
+      // 先頭から最初の未読フィードを返す
+      const first = this.items.find(
+        (item): item is FeedListItem & { feed: Feed & { latest_entry_at?: number | null } } =>
+          item.type === 'feed' && item.feed != null && item.feed.unread_count > 0
+      );
+      return first?.feed ?? null;
+    }
+
+    // 現在のフィードの位置を全アイテムから探す（unread_count が0でも見つかる）
+    const currentIdx = this.items.findIndex(
+      (item) => item.type === 'feed' && item.feed?.id === afterFeedId
+    );
+    const startIdx = currentIdx === -1 ? 0 : currentIdx + 1;
+
+    // そこより後で未読のあるフィードを探す
+    for (let i = startIdx; i < this.items.length; i++) {
+      const item = this.items[i];
+      if (item.type === 'feed' && item.feed && item.feed.unread_count > 0) {
+        return item.feed;
+      }
+    }
+
+    return null;
+  }
+
+  selectFeedById(feedId: number): void {
+    const idx = this.items.findIndex((item) => item.type === 'feed' && item.feed?.id === feedId);
+    if (idx !== -1) {
+      this.selectedIndex = idx;
+      this.render();
+    }
+  }
 }
