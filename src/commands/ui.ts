@@ -94,7 +94,7 @@ export async function cmdUi(): Promise<void> {
 
   function resetStatus(): void {
     statusBar.setContent(
-      ' {bold}j/k{/bold}:move  {bold}Enter{/bold}:select  {bold}s{/bold}:sort  {bold}H{/bold}:hide-read  {bold}P{/bold}:pin  {bold}u{/bold}:read  {bold}v{/bold}:browser  {bold}r{/bold}:reload  {bold}/{/bold}:search  {bold}Tab/S-Tab{/bold}:focus  {bold}?{/bold}:help  {bold}q{/bold}:quit'
+      ' {bold}n/p{/bold}:feed  {bold}j/k{/bold}:entry  {bold}Space{/bold}:read  {bold}o{/bold}:browser  {bold}/{/bold}:search  {bold}r{/bold}:reload  {bold}Tab{/bold}:focus  {bold}?{/bold}:help  {bold}q{/bold}:quit'
     );
     screen.render();
   }
