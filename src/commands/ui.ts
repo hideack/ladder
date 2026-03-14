@@ -382,6 +382,17 @@ export async function cmdUi(): Promise<void> {
     feedList.refresh();
   });
 
+  // c: フォーカスに関わらず選択中記事のピン留めをトグル
+  screen.key(['c'], () => {
+    if (searchMode) return;
+    const entry = entryList.getSelected();
+    if (!entry) return;
+    entryList.togglePinSelected();
+    feedList.refresh();
+    setStatus(entry.is_pinned ? 'Unpinned' : 'Pinned');
+    setTimeout(() => resetStatus(), 1500);
+  });
+
   entryPane.key(['u'], () => {
     if (focus !== 'entry') return;
     entryList.toggleReadSelected();
