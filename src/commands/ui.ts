@@ -425,7 +425,7 @@ export async function cmdUi(): Promise<void> {
   screen.key(['space'], () => {
     if (focus === 'content') {
       if (!isContentAtBottom()) {
-        entryView.scrollDown();
+        entryView.scrollPage();
       } else {
         advanceSpaceReading();
       }

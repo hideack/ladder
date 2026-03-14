@@ -56,6 +56,12 @@ export class EntryView {
     this.pane.screen.render();
   }
 
+  scrollPage(): void {
+    const pageSize = Math.max(1, (this.pane.height as number) - 2);
+    this.pane.scroll(pageSize);
+    this.pane.screen.render();
+  }
+
   scrollUp(): void {
     this.pane.scroll(-3);
     this.pane.screen.render();
