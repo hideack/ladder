@@ -59,8 +59,10 @@ export async function cmdUi(): Promise<void> {
         '  {bold}?{/bold}          このヘルプを表示/閉じる',
         '',
         ' {bold}{cyan-fg}── 全ペイン共通 ────────────────────────{/cyan-fg}{/bold}',
-        '  {bold}n / p{/bold}      フィードカーソル 次/前へ',
-        '  {bold}j / k{/bold}      エントリーカーソル 次/前へ (自動既読)',
+        '  {bold}n{/bold}          フィードカーソル 次へ',
+        '  {bold}j / k{/bold}      フォーカス依存: Feedペイン→フィード移動 / 他→エントリー移動',
+        '  {bold}J / K{/bold}      同上・ページ単位移動',
+        '  {bold}p{/bold}          ピン留めトグル',
         '  {bold}Space{/bold}      未読記事を順に読む (次へ)',
         '  {bold}b{/bold}          逆方向ページ送り (前へ)',
         '  {bold}o{/bold}          ブラウザで開く',
@@ -74,13 +76,10 @@ export async function cmdUi(): Promise<void> {
         '  {bold}a{/bold}          カテゴリ割り当て',
         '  {bold}C{/bold}          カテゴリマネージャー',
         '',
-        ' {bold}{cyan-fg}── 全ペイン共通 (追加) ─────────────────{/cyan-fg}{/bold}',
-        '  {bold}c{/bold}          ピン留めトグル',
-        '  {bold}m{/bold}          フィード全件既読 → 次フィードへ',
-        '',
         ' {bold}{green-fg}── Entries ペイン ──────────────────────{/green-fg}{/bold}',
         '  {bold}↓ / ↑{/bold}      記事移動 (自動既読)',
         '  {bold}u{/bold}          未読/既読トグル',
+        '  {bold}m{/bold}          フィード全件既読 → 次フィードへ',
         '  {bold}v{/bold}          ブラウザで開く',
         '',
       ].join('\n'),
@@ -102,7 +101,7 @@ export async function cmdUi(): Promise<void> {
 
   function resetStatus(): void {
     statusBar.setContent(
-      ' {bold}n/p{/bold}:feed  {bold}j/k{/bold}:entry  {bold}Spc/b{/bold}:read  {bold}o{/bold}:browser  {bold}c{/bold}:pin  {bold}a{/bold}:category  {bold}C{/bold}:cat-mgr  {bold}/{/bold}:search  {bold}?{/bold}:help  {bold}q{/bold}:quit'
+      ' {bold}n{/bold}:feed-next  {bold}j/k{/bold}:move  {bold}J/K{/bold}:page  {bold}Spc/b{/bold}:read  {bold}o{/bold}:browser  {bold}p{/bold}:pin  {bold}a{/bold}:category  {bold}C{/bold}:cat-mgr  {bold}/{/bold}:search  {bold}?{/bold}:help  {bold}q{/bold}:quit'
     );
     screen.render();
   }
@@ -397,8 +396,7 @@ export async function cmdUi(): Promise<void> {
     openSelectedEntry();
   });
 
-  // n/p: フォーカスに関わらず常にフィードカーソルを移動
-  // 移動前に refresh して現在の表示リスト（hideNoUnread 反映済み）を使う
+  // n: フォーカスに関わらず常にフィードカーソルを次へ移動
   screen.key(['n'], () => {
     if (searchMode || modalOpen) return;
     feedList.refresh();
@@ -413,40 +411,96 @@ export async function cmdUi(): Promise<void> {
     }
   });
 
-  screen.key(['p'], () => {
-    if (searchMode || modalOpen) return;
-    feedList.refresh();
-    feedList.moveUp();
-    const sel = feedList.getSelected();
-    if (sel?.type === 'feed' && sel.feed) {
-      entryList.loadFeed(sel.feed.id);
-      previewSelectedEntry();
-    } else if (sel?.type === 'pinned') {
-      entryList.loadPinned();
-      previewSelectedEntry();
-    }
-  });
-
-  // j/k: フォーカスに関わらず常にエントリーカーソルを移動
+  // j/k: フォーカス依存
+  //   feed ペイン → フィードカーソル移動
+  //   entry / content ペイン → エントリーカーソル移動
   screen.key(['j'], () => {
     if (searchMode || modalOpen) return;
-    entryList.moveDown();
-    openSelectedEntry();
+    if (focus === 'feed') {
+      feedList.refresh();
+      feedList.moveDown();
+      const sel = feedList.getSelected();
+      if (sel?.type === 'feed' && sel.feed) {
+        entryList.loadFeed(sel.feed.id);
+        previewSelectedEntry();
+      } else if (sel?.type === 'pinned') {
+        entryList.loadPinned();
+        previewSelectedEntry();
+      }
+    } else {
+      entryList.moveDown();
+      openSelectedEntry();
+    }
   });
 
   screen.key(['k'], () => {
     if (searchMode || modalOpen) return;
-    entryList.moveUp();
-    openSelectedEntry();
+    if (focus === 'feed') {
+      feedList.refresh();
+      feedList.moveUp();
+      const sel = feedList.getSelected();
+      if (sel?.type === 'feed' && sel.feed) {
+        entryList.loadFeed(sel.feed.id);
+        previewSelectedEntry();
+      } else if (sel?.type === 'pinned') {
+        entryList.loadPinned();
+        previewSelectedEntry();
+      }
+    } else {
+      entryList.moveUp();
+      openSelectedEntry();
+    }
   });
 
-  entryPane.key(['S-p'], () => {
-    if (focus !== 'entry') return;
+  // J/K: ページ単位移動（フォーカス依存）
+  screen.key(['S-j'], () => {
+    if (searchMode || modalOpen) return;
+    if (focus === 'feed') {
+      feedList.movePageDown();
+      const sel = feedList.getSelected();
+      if (sel?.type === 'feed' && sel.feed) {
+        entryList.loadFeed(sel.feed.id);
+        previewSelectedEntry();
+      } else if (sel?.type === 'pinned') {
+        entryList.loadPinned();
+        previewSelectedEntry();
+      }
+    } else {
+      entryList.movePageDown();
+      openSelectedEntry();
+    }
+  });
+
+  screen.key(['S-k'], () => {
+    if (searchMode || modalOpen) return;
+    if (focus === 'feed') {
+      feedList.movePageUp();
+      const sel = feedList.getSelected();
+      if (sel?.type === 'feed' && sel.feed) {
+        entryList.loadFeed(sel.feed.id);
+        previewSelectedEntry();
+      } else if (sel?.type === 'pinned') {
+        entryList.loadPinned();
+        previewSelectedEntry();
+      }
+    } else {
+      entryList.movePageUp();
+      openSelectedEntry();
+    }
+  });
+
+  // p: ピン留めトグル（LDR スタイル、グローバル）
+  screen.key(['p'], () => {
+    if (searchMode || modalOpen) return;
+    const entry = entryList.getSelected();
+    if (!entry) return;
     entryList.togglePinSelected();
     feedList.refresh();
+    setStatus(entry.is_pinned ? 'Pinned' : 'Unpinned');
+    setTimeout(() => resetStatus(), 1500);
   });
 
-  // c: フォーカスに関わらず選択中記事のピン留めをトグル
+  // c: ピン留めトグル（後方互換）
   screen.key(['c'], () => {
     if (searchMode || modalOpen) return;
     const entry = entryList.getSelected();

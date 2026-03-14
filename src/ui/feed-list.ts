@@ -202,6 +202,18 @@ export class FeedList {
     }
   }
 
+  movePageDown(): void {
+    const pageSize = Math.max(1, (this.pane.height as number) - 2);
+    this.selectedIndex = Math.min(this.items.length - 1, this.selectedIndex + pageSize);
+    this.render();
+  }
+
+  movePageUp(): void {
+    const pageSize = Math.max(1, (this.pane.height as number) - 2);
+    this.selectedIndex = Math.max(0, this.selectedIndex - pageSize);
+    this.render();
+  }
+
   getSelected(): FeedListItem | undefined {
     return this.items[this.selectedIndex];
   }
