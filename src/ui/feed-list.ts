@@ -20,7 +20,7 @@ export class FeedList {
   private q: Queries;
 
   sortMode: SortMode = 'latest';
-  hideNoUnread = false;
+  hideNoUnread = true;
 
   constructor(
     private pane: blessed.Widgets.BoxElement,
