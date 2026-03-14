@@ -59,10 +59,10 @@ export function showCategoryPicker(
   overlay.focus();
 
   function onKeypress(ch: string | undefined, key: { name: string }): void {
-    if (key.name === 'up') {
+    if (key.name === 'up' || ch === 'k') {
       selectedIndex = Math.max(0, selectedIndex - 1);
       render();
-    } else if (key.name === 'down') {
+    } else if (key.name === 'down' || ch === 'j') {
       selectedIndex = Math.min(items.length - 1, selectedIndex + 1);
       render();
     } else if (key.name === 'enter') {
