@@ -5,6 +5,7 @@ import { Queries } from '../db/queries.js';
 
 const TIMEOUT_MS = 10_000;
 const MAX_ERROR_COUNT = 5;
+const RETRY_INTERVAL_SEC = 30 * 24 * 60 * 60; // 30 days
 
 interface CrawlResult {
   fetched: number;
@@ -33,9 +34,18 @@ export async function crawlFeed(
 
   for (const feed of feeds) {
     if (!feed) continue;
+
+    const now = Math.floor(Date.now() / 1000);
+
     if (feed.error_count >= MAX_ERROR_COUNT) {
-      process.stderr.write(`[skip] feed #${feed.id} "${feed.title}" has too many errors (${feed.error_count})\n`);
-      continue;
+      // 次回リトライ時刻が未来なら休止中 → スキップ
+      if (feed.next_retry_at != null && now < feed.next_retry_at) {
+        const retryDate = new Date(feed.next_retry_at * 1000).toISOString().slice(0, 10);
+        process.stderr.write(`[skip] feed #${feed.id} "${feed.title}" suspended until ${retryDate}\n`);
+        continue;
+      }
+      // リトライ時刻が来た (または未設定) → 1ヶ月ぶりのリトライを試みる
+      process.stderr.write(`[retry] feed #${feed.id} "${feed.title}" monthly retry\n`);
     }
 
     try {
@@ -58,7 +68,7 @@ export async function crawlFeed(
 
       if (response.status === 304) {
         // Not Modified — nothing to do
-        q.updateFeedMeta(feed.id, { last_fetched_at: Math.floor(Date.now() / 1000), error_count: 0 });
+        q.updateFeedMeta(feed.id, { last_fetched_at: now, error_count: 0, next_retry_at: null });
         result.fetched++;
         continue;
       }
@@ -83,8 +93,9 @@ export async function crawlFeed(
         description: description,
         etag: newEtag ?? feed.etag ?? undefined,
         last_modified: newLastModified ?? feed.last_modified ?? undefined,
-        last_fetched_at: Math.floor(Date.now() / 1000),
+        last_fetched_at: now,
         error_count: 0,
+        next_retry_at: null,
       });
 
       // Insert entries
@@ -125,8 +136,16 @@ export async function crawlFeed(
       result.fetched++;
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : String(err);
-      process.stderr.write(`[error] feed #${feed.id} "${feed.title}": ${message}\n`);
-      q.updateFeedMeta(feed.id, { error_count: feed.error_count + 1 });
+      const newErrorCount = feed.error_count + 1;
+      if (newErrorCount >= MAX_ERROR_COUNT) {
+        const nextRetry = now + RETRY_INTERVAL_SEC;
+        const retryDate = new Date(nextRetry * 1000).toISOString().slice(0, 10);
+        process.stderr.write(`[error] feed #${feed.id} "${feed.title}": ${message} — suspended, next retry ${retryDate}\n`);
+        q.updateFeedMeta(feed.id, { error_count: newErrorCount, next_retry_at: nextRetry });
+      } else {
+        process.stderr.write(`[error] feed #${feed.id} "${feed.title}": ${message} (${newErrorCount}/${MAX_ERROR_COUNT})\n`);
+        q.updateFeedMeta(feed.id, { error_count: newErrorCount });
+      }
       result.errors.push({ feed_id: feed.id, message });
     }
   }

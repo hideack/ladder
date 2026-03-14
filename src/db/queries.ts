@@ -20,6 +20,7 @@ export interface Feed {
   last_modified: string | null;
   last_fetched_at: number | null;
   error_count: number;
+  next_retry_at: number | null;
   created_at: number;
 }
 
@@ -89,7 +90,7 @@ export class Queries {
   updateFeedMeta(
     id: number,
     data: Partial<
-      Pick<Feed, 'title' | 'site_url' | 'description' | 'etag' | 'last_modified' | 'last_fetched_at' | 'error_count'>
+      Pick<Feed, 'title' | 'site_url' | 'description' | 'etag' | 'last_modified' | 'last_fetched_at' | 'error_count' | 'next_retry_at'>
     >
   ): void {
     const keys = Object.keys(data) as Array<keyof typeof data>;

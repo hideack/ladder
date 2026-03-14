@@ -46,6 +46,7 @@ function initSchema(db: Database.Database): void {
       last_modified   TEXT,
       last_fetched_at INTEGER,
       error_count     INTEGER NOT NULL DEFAULT 0,
+      next_retry_at   INTEGER,
       created_at      INTEGER NOT NULL DEFAULT (unixepoch())
     );
 
@@ -108,4 +109,10 @@ function initSchema(db: Database.Database): void {
         VALUES('delete', OLD.id, OLD.title, OLD.content);
     END;
   `);
+
+  // Migrations for existing databases
+  const cols = (db.prepare(`PRAGMA table_info(feeds)`).all() as { name: string }[]).map((r) => r.name);
+  if (!cols.includes('next_retry_at')) {
+    db.exec(`ALTER TABLE feeds ADD COLUMN next_retry_at INTEGER`);
+  }
 }

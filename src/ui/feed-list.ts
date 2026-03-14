@@ -117,7 +117,11 @@ export class FeedList {
     if (item.type === 'feed' && item.feed) {
       const feed = item.feed;
       const indent = '  '.repeat(item.indent);
-      const errorMark = feed.error_count >= 5 ? '{red-fg}⚠{/red-fg} ' : '';
+      const errorMark = feed.next_retry_at != null
+        ? '{red-fg}⏸{/red-fg} '
+        : feed.error_count >= 5
+        ? '{red-fg}⚠{/red-fg} '
+        : '';
       const unreadStr =
         feed.unread_count > 0
           ? ` {blue-fg}(${feed.unread_count}){/blue-fg}`
