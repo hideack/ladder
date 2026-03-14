@@ -19,7 +19,7 @@ export class FeedList {
   private collapsedCategories = new Set<number>();
   private q: Queries;
 
-  sortMode: SortMode = 'unread';
+  sortMode: SortMode = 'latest';
   hideNoUnread = false;
 
   constructor(

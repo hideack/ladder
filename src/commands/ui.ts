@@ -47,6 +47,7 @@ export async function cmdUi(): Promise<void> {
         '',
         ' {bold}{yellow-fg}── Global ──────────────────────────────{/yellow-fg}{/bold}',
         '  {bold}Tab{/bold}        次のペインへフォーカス移動',
+        '  {bold}S-Tab{/bold}      前のペインへフォーカス移動',
         '  {bold}q / C-c{/bold}   終了',
         '  {bold}r{/bold}          選択フィードをリロード',
         '  {bold}R{/bold}          全フィードをリロード',
@@ -91,7 +92,7 @@ export async function cmdUi(): Promise<void> {
 
   function resetStatus(): void {
     statusBar.setContent(
-      ' {bold}j/k{/bold}:move  {bold}Enter{/bold}:select  {bold}s{/bold}:sort  {bold}H{/bold}:hide-read  {bold}P{/bold}:pin  {bold}u{/bold}:read  {bold}v{/bold}:browser  {bold}r{/bold}:reload  {bold}/{/bold}:search  {bold}Tab{/bold}:focus  {bold}?{/bold}:help  {bold}q{/bold}:quit'
+      ' {bold}j/k{/bold}:move  {bold}Enter{/bold}:select  {bold}s{/bold}:sort  {bold}H{/bold}:hide-read  {bold}P{/bold}:pin  {bold}u{/bold}:read  {bold}v{/bold}:browser  {bold}r{/bold}:reload  {bold}/{/bold}:search  {bold}Tab/S-Tab{/bold}:focus  {bold}?{/bold}:help  {bold}q{/bold}:quit'
     );
     screen.render();
   }
@@ -118,10 +119,18 @@ export async function cmdUi(): Promise<void> {
     entryView.show(entryWithFeed);
   }
 
-  // Tab: cycle focus
+  // Tab: cycle focus forward
   screen.key(['tab'], () => {
     if (focus === 'feed') focus = 'entry';
     else if (focus === 'entry') focus = 'content';
+    else focus = 'feed';
+    updateFocus();
+  });
+
+  // Shift+Tab: cycle focus backward
+  screen.key(['S-tab'], () => {
+    if (focus === 'feed') focus = 'content';
+    else if (focus === 'content') focus = 'entry';
     else focus = 'feed';
     updateFocus();
   });
