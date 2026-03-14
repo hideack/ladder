@@ -76,6 +76,7 @@ export class EntryList {
 
   render(): void {
     const lines = this.entries.map((e, i) => this.formatEntry(e, i));
+    this.pane.setContent('');
     this.pane.setContent(lines.length > 0 ? lines.join('\n') : '  (no entries)');
 
     // 端に達したときだけスクロール（カーソルは自然に動く）

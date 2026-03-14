@@ -136,6 +136,7 @@ export class FeedList {
 
   render(): void {
     const lines = this.items.map((item, i) => this.formatItem(item, i));
+    this.pane.setContent('');
     this.pane.setContent(lines.join('\n'));
 
     // 端に達したときだけスクロール（カーソルは自然に動く）

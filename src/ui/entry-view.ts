@@ -38,6 +38,7 @@ export class EntryView {
       escapeMarkup(bodyText),
     ].join('\n');
 
+    this.pane.setContent('');
     this.pane.setContent(content);
     this.pane.setLabel(` Content `);
     // Reset scroll to top
