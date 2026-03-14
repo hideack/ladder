@@ -4,6 +4,7 @@ import { Queries, Entry } from '../db/queries.js';
 export class EntryList {
   private entries: Array<Entry & { feed_title?: string }> = [];
   private selectedIndex = 0;
+  private viewTop = 0;
   private q: Queries;
   private currentFeedId: number | null = null;
   private showPinned = false;
@@ -20,6 +21,7 @@ export class EntryList {
     this.showPinned = false;
     this.entries = this.q.getEntriesByFeed(feedId, 100);
     this.selectedIndex = 0;
+    this.viewTop = 0;
     this.render();
   }
 
@@ -28,6 +30,7 @@ export class EntryList {
     this.showPinned = true;
     this.entries = this.q.getPinnedEntries(100);
     this.selectedIndex = 0;
+    this.viewTop = 0;
     this.render();
   }
 
@@ -37,6 +40,7 @@ export class EntryList {
     const results = this.q.searchEntries(query, 50);
     this.entries = results;
     this.selectedIndex = 0;
+    this.viewTop = 0;
     this.render();
   }
 
@@ -74,8 +78,14 @@ export class EntryList {
     const lines = this.entries.map((e, i) => this.formatEntry(e, i));
     this.pane.setContent(lines.length > 0 ? lines.join('\n') : '  (no entries)');
 
-    // 選択行が見えるようにスクロール追従
-    this.pane.scrollTo(this.selectedIndex);
+    // 端に達したときだけスクロール（カーソルは自然に動く）
+    const innerHeight = Math.max(1, (this.pane.height as number) - 2);
+    if (this.selectedIndex < this.viewTop) {
+      this.viewTop = this.selectedIndex;
+    } else if (this.selectedIndex >= this.viewTop + innerHeight) {
+      this.viewTop = this.selectedIndex - innerHeight + 1;
+    }
+    this.pane.scrollTo(this.viewTop);
 
     const label = this.showPinned
       ? ' ★ Pinned '

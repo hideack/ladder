@@ -1,4 +1,5 @@
 import { execSync } from 'child_process';
+import blessed from 'neo-blessed';
 import { openDb } from '../db/schema.js';
 import { Queries } from '../db/queries.js';
 import { crawlFeed } from '../crawler/index.js';
@@ -21,6 +22,67 @@ export async function cmdUi(): Promise<void> {
   // Current focus: 'feed' | 'entry' | 'content'
   let focus: 'feed' | 'entry' | 'content' = 'feed';
   let searchMode = false;
+  let helpVisible = false;
+
+  function showHelp(): void {
+    if (helpVisible) return;
+    helpVisible = true;
+
+    const overlay = blessed.box({
+      parent: screen,
+      top: 'center',
+      left: 'center',
+      width: 58,
+      height: 28,
+      border: { type: 'line' },
+      label: ' Help — any key to close ',
+      tags: true,
+      style: {
+        border: { fg: 'yellow' },
+        label: { fg: 'yellow', bold: true },
+        bg: 'black',
+        fg: 'white',
+      },
+      content: [
+        '',
+        ' {bold}{yellow-fg}── Global ──────────────────────────────{/yellow-fg}{/bold}',
+        '  {bold}Tab{/bold}        次のペインへフォーカス移動',
+        '  {bold}q / C-c{/bold}   終了',
+        '  {bold}r{/bold}          選択フィードをリロード',
+        '  {bold}R{/bold}          全フィードをリロード',
+        '  {bold}/{/bold}          タイトル検索',
+        '  {bold}Escape{/bold}     検索モード解除',
+        '  {bold}?{/bold}          このヘルプを表示/閉じる',
+        '',
+        ' {bold}{cyan-fg}── Feeds ペイン ────────────────────────{/cyan-fg}{/bold}',
+        '  {bold}j / ↓{/bold}      次のフィード/カテゴリへ',
+        '  {bold}k / ↑{/bold}      前のフィード/カテゴリへ',
+        '  {bold}Enter/Spc{/bold}  フィード選択 / カテゴリ折りたたみ',
+        '  {bold}s{/bold}          ソート切替 (未読数 ↔ 最新記事)',
+        '  {bold}H{/bold}          未読なしフィードを非表示トグル',
+        '  {bold}d{/bold}          フィード購読解除',
+        '',
+        ' {bold}{green-fg}── Entries ペイン ──────────────────────{/green-fg}{/bold}',
+        '  {bold}j / ↓{/bold}      次の記事へ (自動既読)',
+        '  {bold}k / ↑{/bold}      前の記事へ',
+        '  {bold}n{/bold}          次の未読記事へ',
+        '  {bold}p{/bold}          前の未読記事へ',
+        '  {bold}P{/bold}          ピン留めトグル',
+        '  {bold}u{/bold}          未読/既読トグル',
+        '  {bold}m{/bold}          フィード全件既読',
+        '  {bold}v{/bold}          ブラウザで開く',
+        '',
+      ].join('\n'),
+    });
+
+    screen.render();
+
+    screen.once('keypress', () => {
+      helpVisible = false;
+      overlay.destroy();
+      screen.render();
+    });
+  }
 
   function setStatus(msg: string): void {
     statusBar.setContent(` ${msg}`);
@@ -29,7 +91,7 @@ export async function cmdUi(): Promise<void> {
 
   function resetStatus(): void {
     statusBar.setContent(
-      ' {bold}j/k{/bold}:move  {bold}Enter{/bold}:select  {bold}P{/bold}:pin  {bold}u{/bold}:read  {bold}v{/bold}:browser  {bold}r{/bold}:reload  {bold}/{/bold}:search  {bold}Tab{/bold}:focus  {bold}q{/bold}:quit'
+      ' {bold}j/k{/bold}:move  {bold}Enter{/bold}:select  {bold}s{/bold}:sort  {bold}H{/bold}:hide-read  {bold}P{/bold}:pin  {bold}u{/bold}:read  {bold}v{/bold}:browser  {bold}r{/bold}:reload  {bold}/{/bold}:search  {bold}Tab{/bold}:focus  {bold}?{/bold}:help  {bold}q{/bold}:quit'
     );
     screen.render();
   }
@@ -62,6 +124,11 @@ export async function cmdUi(): Promise<void> {
     else if (focus === 'entry') focus = 'content';
     else focus = 'feed';
     updateFocus();
+  });
+
+  // Help
+  screen.key(['?'], () => {
+    showHelp();
   });
 
   // Quit
@@ -162,6 +229,22 @@ export async function cmdUi(): Promise<void> {
       focus = 'entry';
       updateFocus();
     }
+  });
+
+  // s: ソート切り替え（未読数 ↔ 最新記事日時）
+  feedPane.key(['s'], () => {
+    if (focus !== 'feed') return;
+    feedList.toggleSort();
+    setStatus(`Sort: ${feedList.sortMode === 'unread' ? 'unread count' : 'latest entry'}`);
+    setTimeout(() => resetStatus(), 1500);
+  });
+
+  // H: 未読なしを非表示トグル
+  feedPane.key(['H'], () => {
+    if (focus !== 'feed') return;
+    feedList.toggleHideNoUnread();
+    setStatus(`Hide no-unread: ${feedList.hideNoUnread ? 'ON' : 'OFF'}`);
+    setTimeout(() => resetStatus(), 1500);
   });
 
   feedPane.key(['d'], () => {

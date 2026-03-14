@@ -199,6 +199,17 @@ export class Queries {
     return result.changes;
   }
 
+  getAllFeedsWithLatest(): Array<Feed & { latest_entry_at: number | null }> {
+    return this.db
+      .prepare(`
+        SELECT f.*, MAX(e.published_at) AS latest_entry_at
+        FROM feeds f
+        LEFT JOIN entries e ON e.feed_id = f.id
+        GROUP BY f.id
+      `)
+      .all() as Array<Feed & { latest_entry_at: number | null }>;
+  }
+
   // ── Extra helpers for MCP / TUI ─────────────────────────────────────────────
 
   getEntriesWithFeedTitle(
