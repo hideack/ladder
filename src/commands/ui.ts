@@ -66,7 +66,7 @@ export async function cmdUi(): Promise<void> {
         '  {bold}↓ / ↑{/bold}      フィード・カテゴリ移動',
         '  {bold}Enter{/bold}      フィード選択 / カテゴリ折りたたみ',
         '  {bold}s{/bold}          ソート切替 (未読数 ↔ 最新記事)',
-        '  {bold}H{/bold}          未読なしフィードを非表示トグル',
+        '  {bold}H{/bold}          フィルター切替 (active→unread→all)',
         '  {bold}d{/bold}          フィード購読解除',
         '',
         ' {bold}{cyan-fg}── 全ペイン共通 (追加) ─────────────────{/cyan-fg}{/bold}',
@@ -288,11 +288,14 @@ export async function cmdUi(): Promise<void> {
     setTimeout(() => resetStatus(), 1500);
   });
 
-  // H: 未読なし非表示トグルもグローバルキーで確実に捕捉
+  // H: フィルターモードを循環 (active → unread → all → active)
   screen.key(['S-h'], () => {
     if (searchMode || focus !== 'feed') return;
-    feedList.toggleHideNoUnread();
-    setStatus(`Hide no-unread: ${feedList.hideNoUnread ? 'ON' : 'OFF'}`);
+    feedList.cycleFilter();
+    const label =
+      feedList.filterMode === 'active' ? '未読 & 180日以内' :
+      feedList.filterMode === 'unread' ? '未読のみ' : 'すべて表示';
+    setStatus(`Filter: ${label}`);
     setTimeout(() => resetStatus(), 1500);
   });
 

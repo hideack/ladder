@@ -2,6 +2,9 @@ import blessed from 'neo-blessed';
 import { Queries, Feed, Category } from '../db/queries.js';
 
 export type SortMode = 'unread' | 'latest';
+export type FilterMode = 'active' | 'unread' | 'all';
+
+const STALE_THRESHOLD_SEC = 180 * 24 * 60 * 60; // 180 days
 
 export interface FeedListItem {
   type: 'category' | 'feed' | 'pinned';
@@ -20,7 +23,7 @@ export class FeedList {
   private q: Queries;
 
   sortMode: SortMode = 'latest';
-  hideNoUnread = true;
+  filterMode: FilterMode = 'active';
 
   constructor(
     private pane: blessed.Widgets.BoxElement,
@@ -53,10 +56,17 @@ export class FeedList {
   ): FeedListItem[] {
     const items: FeedListItem[] = [];
 
-    // 未読フィルタ適用
-    const visibleFeeds = this.hideNoUnread
-      ? feeds.filter((f) => f.unread_count > 0)
-      : feeds;
+    // フィルタ適用
+    const now = Math.floor(Date.now() / 1000);
+    const visibleFeeds = feeds.filter((f) => {
+      if (this.filterMode === 'active') {
+        return f.unread_count > 0 && (f.latest_entry_at != null && now - f.latest_entry_at <= STALE_THRESHOLD_SEC);
+      }
+      if (this.filterMode === 'unread') {
+        return f.unread_count > 0;
+      }
+      return true; // 'all'
+    });
 
     // Pinned section at the top
     items.push({ type: 'pinned', indent: 0 });
@@ -156,7 +166,9 @@ export class FeedList {
     const feeds = this.q.getAllFeeds();
     const totalUnread = feeds.reduce((sum, f) => sum + f.unread_count, 0);
     const sortLabel = this.sortMode === 'unread' ? 'unread' : 'latest';
-    const filterLabel = this.hideNoUnread ? ' {red-fg}H{/red-fg}' : '';
+    const filterLabel =
+      this.filterMode === 'active' ? ' {red-fg}active{/red-fg}' :
+      this.filterMode === 'unread' ? ' {yellow-fg}unread{/yellow-fg}' : '';
     const unreadLabel = totalUnread > 0 ? ` {blue-fg}(${totalUnread}){/blue-fg}` : '';
     this.pane.setLabel(` Feeds${unreadLabel} {gray-fg}[${sortLabel}]${filterLabel}{/gray-fg} `);
 
@@ -168,8 +180,9 @@ export class FeedList {
     this.refresh();
   }
 
-  toggleHideNoUnread(): void {
-    this.hideNoUnread = !this.hideNoUnread;
+  cycleFilter(): void {
+    const next: Record<FilterMode, FilterMode> = { active: 'unread', unread: 'all', all: 'active' };
+    this.filterMode = next[this.filterMode];
     this.selectedIndex = 0;
     this.viewTop = 0;
     this.refresh();
