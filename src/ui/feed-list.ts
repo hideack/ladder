@@ -34,6 +34,8 @@ export class FeedList {
   private buildItems(feeds: Feed[], categories: Category[]): FeedListItem[] {
     const items: FeedListItem[] = [];
 
+    const sortByUnread = (a: Feed, b: Feed) => b.unread_count - a.unread_count;
+
     // Pinned section at the top
     items.push({ type: 'pinned', indent: 0 });
 
@@ -53,7 +55,7 @@ export class FeedList {
           items.push({ type: 'category', category: sub, categoryId: sub.id, collapsed: subCollapsed, indent: 1 });
 
           if (!subCollapsed) {
-            const subFeeds = feeds.filter((f) => f.category_id === sub.id);
+            const subFeeds = feeds.filter((f) => f.category_id === sub.id).sort(sortByUnread);
             for (const feed of subFeeds) {
               items.push({ type: 'feed', feed, indent: 2 });
             }
@@ -61,17 +63,15 @@ export class FeedList {
         }
 
         // Feeds in this root category (not in sub-category)
-        const catFeeds = feeds.filter(
-          (f) => f.category_id === cat.id
-        );
+        const catFeeds = feeds.filter((f) => f.category_id === cat.id).sort(sortByUnread);
         for (const feed of catFeeds) {
           items.push({ type: 'feed', feed, indent: 1 });
         }
       }
     }
 
-    // Uncategorized feeds
-    const uncategorized = feeds.filter((f) => f.category_id == null);
+    // Uncategorized feeds — unread first
+    const uncategorized = feeds.filter((f) => f.category_id == null).sort(sortByUnread);
     for (const feed of uncategorized) {
       items.push({ type: 'feed', feed, indent: 0 });
     }
@@ -103,9 +103,14 @@ export class FeedList {
       const unreadStr =
         feed.unread_count > 0
           ? ` {blue-fg}(${feed.unread_count}){/blue-fg}`
-          : ` {gray-fg}(0){/gray-fg}`;
-      const title = feed.title || feed.url;
-      const truncated = title.length > 20 ? title.substring(0, 19) + '…' : title;
+          : '';
+      // タイトル未取得のときはURLのホスト名を表示
+      let title = feed.title;
+      if (!title) {
+        try { title = new URL(feed.url).hostname; } catch { title = feed.url; }
+      }
+      const maxLen = 18 - item.indent * 2;
+      const truncated = title.length > maxLen ? title.substring(0, maxLen - 1) + '…' : title;
       return `${prefix}${indent}${errorMark}${truncated}${unreadStr}${suffix}`;
     }
 
@@ -115,6 +120,9 @@ export class FeedList {
   render(): void {
     const lines = this.items.map((item, i) => this.formatItem(item, i));
     this.pane.setContent(lines.join('\n'));
+
+    // 選択行が見えるようにスクロール追従
+    this.pane.scrollTo(this.selectedIndex);
 
     // Update label with total unread
     const feeds = this.q.getAllFeeds();

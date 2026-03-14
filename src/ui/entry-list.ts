@@ -74,6 +74,9 @@ export class EntryList {
     const lines = this.entries.map((e, i) => this.formatEntry(e, i));
     this.pane.setContent(lines.length > 0 ? lines.join('\n') : '  (no entries)');
 
+    // 選択行が見えるようにスクロール追従
+    this.pane.scrollTo(this.selectedIndex);
+
     const label = this.showPinned
       ? ' ★ Pinned '
       : this.currentFeedId != null
