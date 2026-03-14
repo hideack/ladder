@@ -218,7 +218,7 @@ export async function cmdUi(): Promise<void> {
   });
 
   // Reload all feeds
-  screen.key(['R'], async () => {
+  screen.key(['S-r'], async () => {
     setStatus('Reloading all feeds...');
     await crawlFeed(db);
     feedList.refresh();
@@ -285,7 +285,7 @@ export async function cmdUi(): Promise<void> {
   });
 
   // H: 未読なし非表示トグルもグローバルキーで確実に捕捉
-  screen.key(['H'], () => {
+  screen.key(['S-h'], () => {
     if (focus !== 'feed') return;
     feedList.toggleHideNoUnread();
     setStatus(`Hide no-unread: ${feedList.hideNoUnread ? 'ON' : 'OFF'}`);
@@ -343,7 +343,7 @@ export async function cmdUi(): Promise<void> {
     if (prev) openSelectedEntry();
   });
 
-  entryPane.key(['P'], () => {
+  entryPane.key(['S-p'], () => {
     if (focus !== 'entry') return;
     entryList.togglePinSelected();
     feedList.refresh();
