@@ -1,4 +1,4 @@
-import { execSync } from 'child_process';
+import { spawnSync } from 'child_process';
 import blessed from 'neo-blessed';
 import { openDb } from '../db/schema.js';
 import { Queries } from '../db/queries.js';
@@ -439,17 +439,32 @@ export async function cmdUi(): Promise<void> {
   function openInBrowser(): void {
     const entry = entryList.getSelected();
     if (!entry?.url) return;
+
+    // URL を検証: http/https スキームのみ許可してシェルインジェクションを防ぐ
+    let parsedUrl: URL;
     try {
-      const platform = process.platform;
-      const cmd =
-        platform === 'darwin'
-          ? `open "${entry.url}"`
-          : platform === 'win32'
-          ? `start "${entry.url}"`
-          : `xdg-open "${entry.url}"`;
-      execSync(cmd);
+      parsedUrl = new URL(entry.url);
     } catch {
-      setStatus(`Could not open: ${entry.url}`);
+      setStatus(`Invalid URL: ${entry.url}`);
+      setTimeout(() => resetStatus(), 2000);
+      return;
+    }
+    if (parsedUrl.protocol !== 'http:' && parsedUrl.protocol !== 'https:') {
+      setStatus(`Blocked non-http URL: ${parsedUrl.protocol}`);
+      setTimeout(() => resetStatus(), 2000);
+      return;
+    }
+
+    // execSync に文字列結合せず spawnSync で引数を配列渡し（コマンドインジェクション対策）
+    const platform = process.platform;
+    const [cmd, args] =
+      platform === 'darwin' ? ['open', [entry.url]] :
+      platform === 'win32'  ? ['cmd', ['/c', 'start', '', entry.url]] :
+                              ['xdg-open', [entry.url]];
+
+    const result = spawnSync(cmd, args, { stdio: 'ignore' });
+    if (result.error) {
+      setStatus(`Could not open browser`);
       setTimeout(() => resetStatus(), 2000);
     }
   }
