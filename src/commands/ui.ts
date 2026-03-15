@@ -257,7 +257,7 @@ export async function cmdUi(): Promise<void> {
             entryList.loadPinned();
           }
         } else {
-          entryList.loadSearch(q);
+          entryList.loadSearch(q, priorFeedId ?? undefined);
         }
       }
       setStatus(`/ ${q}▋`);

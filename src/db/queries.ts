@@ -180,8 +180,23 @@ export class Queries {
 
   searchEntries(
     query: string,
-    limit = 20
+    limit = 20,
+    feedId?: number
   ): Array<Entry & { feed_title: string; snippet: string }> {
+    if (feedId != null) {
+      return this.db
+        .prepare(`
+          SELECT e.*, f.title as feed_title,
+                 snippet(entries_fts, 0, '[', ']', '...', 20) as snippet
+          FROM entries_fts
+          JOIN entries e ON e.id = entries_fts.rowid
+          JOIN feeds f ON f.id = e.feed_id
+          WHERE entries_fts MATCH ? AND e.feed_id = ?
+          ORDER BY e.published_at DESC, e.fetched_at DESC
+          LIMIT ?
+        `)
+        .all(query, feedId, limit) as Array<Entry & { feed_title: string; snippet: string }>;
+    }
     return this.db
       .prepare(`
         SELECT e.*, f.title as feed_title,

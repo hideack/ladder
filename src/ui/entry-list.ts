@@ -37,11 +37,11 @@ export class EntryList {
     this.render();
   }
 
-  loadSearch(query: string): void {
-    this.currentFeedId = null;
+  loadSearch(query: string, feedId?: number): void {
+    this.currentFeedId = feedId ?? null;
     this.showPinned = false;
     this.searchQuery = query;
-    const results = this.q.searchEntries(query, 50);
+    const results = this.q.searchEntries(query, 50, feedId);
     this.entries = results;
     this.selectedIndex = 0;
     this.viewTop = 0;
