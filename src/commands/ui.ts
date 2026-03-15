@@ -618,13 +618,8 @@ export async function cmdUi(): Promise<void> {
     }
   }
 
-  entryPane.key(['v'], () => {
-    if (focus !== 'entry') return;
-    openInBrowser();
-  });
-
-  // o: ブラウザで開く（どのペインからでも）
-  screen.key(['o'], () => {
+  // v: ブラウザで開く（どのペインからでも）
+  screen.key(['v'], () => {
     if (searchMode || modalOpen) return;
     openInBrowser();
   });
