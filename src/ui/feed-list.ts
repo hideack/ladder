@@ -27,9 +27,11 @@ export class FeedList {
 
   constructor(
     private pane: blessed.Widgets.BoxElement,
-    q: Queries
+    q: Queries,
+    initialFilterMode?: FilterMode
   ) {
     this.q = q;
+    if (initialFilterMode) this.filterMode = initialFilterMode;
     this.refresh();
   }
 
