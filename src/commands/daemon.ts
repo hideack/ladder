@@ -23,13 +23,28 @@ function resolveLadderBin(): string {
   }
 }
 
+function resolveTsxBin(): string {
+  try {
+    return execSync('which tsx', { encoding: 'utf8' }).trim();
+  } catch {
+    // fallback to npx tsx
+    return 'npx';
+  }
+}
+
 function buildPlist(intervalSec: number): string {
   const ladderBin = resolveLadderBin();
-  // Use node + script path when running via tsx in dev
+  // Use tsx + script path when running via tsx in dev
   const isTsx = process.argv[1].endsWith('.ts');
-  const programArgs = isTsx
-    ? [process.execPath, process.argv[1], 'fetch']
-    : [ladderBin, 'fetch'];
+  let programArgs: string[];
+  if (isTsx) {
+    const tsxBin = resolveTsxBin();
+    programArgs = tsxBin === 'npx'
+      ? ['npx', 'tsx', process.argv[1], 'fetch']
+      : [tsxBin, process.argv[1], 'fetch'];
+  } else {
+    programArgs = [ladderBin, 'fetch'];
+  }
 
   const args = programArgs
     .map((a) => `    <string>${a}</string>`)
