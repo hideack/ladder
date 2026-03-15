@@ -3,7 +3,8 @@ import blessed from 'neo-blessed';
 import { openDb } from '../db/schema.js';
 import { Queries } from '../db/queries.js';
 import { crawlFeed } from '../crawler/index.js';
-import { createLayout } from '../ui/layout.js';
+import { createLayout, applyLayout, LayoutMode } from '../ui/layout.js';
+import { loadUiState, saveUiState } from '../ui/ui-state.js';
 import { FeedList } from '../ui/feed-list.js';
 import { EntryList } from '../ui/entry-list.js';
 import { EntryView } from '../ui/entry-view.js';
@@ -14,10 +15,12 @@ export async function cmdUi(): Promise<void> {
   const db = openDb();
   const q = new Queries(db);
 
+  const uiState = loadUiState();
+
   const layout = createLayout();
   const { screen, feedPane, entryPane, contentPane, statusBar } = layout;
 
-  const feedList = new FeedList(feedPane, q);
+  const feedList = new FeedList(feedPane, q, uiState.filterMode);
   const entryList = new EntryList(entryPane, q);
   const entryView = new EntryView(contentPane);
 
@@ -26,6 +29,12 @@ export async function cmdUi(): Promise<void> {
   let searchMode = false;
   let helpVisible = false;
   let modalOpen = false;
+  let layoutMode: LayoutMode = uiState.layoutMode;
+
+  // 前回のレイアウトを復元
+  if (layoutMode !== 'horizontal') {
+    applyLayout(layout, layoutMode);
+  }
 
   function showHelp(): void {
     if (helpVisible) return;
@@ -57,6 +66,7 @@ export async function cmdUi(): Promise<void> {
         '  {bold}/{/bold}          タイトル検索',
         '  {bold}Escape{/bold}     検索モード解除',
         '  {bold}?{/bold}          このヘルプを表示/閉じる',
+        '  {bold}l{/bold}          レイアウト切替 (水平3ペイン ↔ 垂直分割)',
         '',
         ' {bold}{cyan-fg}── 全ペイン共通 ────────────────────────{/cyan-fg}{/bold}',
         '  {bold}n{/bold}          フィードカーソル 次へ',
@@ -101,7 +111,7 @@ export async function cmdUi(): Promise<void> {
 
   function resetStatus(): void {
     statusBar.setContent(
-      ' {bold}n{/bold}:feed-next  {bold}j/k{/bold}:move  {bold}J/K{/bold}:page  {bold}Spc/b{/bold}:read  {bold}o{/bold}:browser  {bold}p{/bold}:pin  {bold}a{/bold}:category  {bold}C{/bold}:cat-mgr  {bold}/{/bold}:search  {bold}?{/bold}:help  {bold}q{/bold}:quit'
+      ' {bold}n{/bold}:feed-next  {bold}j/k{/bold}:move  {bold}J/K{/bold}:page  {bold}Spc/b{/bold}:read  {bold}o{/bold}:browser  {bold}p{/bold}:pin  {bold}a{/bold}:category  {bold}C{/bold}:cat-mgr  {bold}l{/bold}:layout  {bold}/{/bold}:search  {bold}?{/bold}:help  {bold}q{/bold}:quit'
     );
     screen.render();
   }
@@ -166,6 +176,18 @@ export async function cmdUi(): Promise<void> {
   screen.key(['?'], () => {
     if (searchMode || modalOpen) return;
     showHelp();
+  });
+
+  // l: レイアウト切替 (水平3ペイン ↔ 左フィード+右上下分割)
+  screen.key(['l'], () => {
+    if (searchMode || modalOpen) return;
+    layoutMode = layoutMode === 'horizontal' ? 'vertical' : 'horizontal';
+    applyLayout(layout, layoutMode);
+    saveUiState({ layoutMode, filterMode: feedList.filterMode });
+    const label = layoutMode === 'horizontal' ? '水平3ペイン' : '垂直分割';
+    setStatus(`Layout: ${label}`);
+    screen.render();
+    setTimeout(() => resetStatus(), 1500);
   });
 
   // Quit
@@ -306,6 +328,7 @@ export async function cmdUi(): Promise<void> {
   screen.key(['S-h'], () => {
     if (searchMode || modalOpen || focus !== 'feed') return;
     feedList.cycleFilter();
+    saveUiState({ layoutMode, filterMode: feedList.filterMode });
     const label =
       feedList.filterMode === 'active' ? '未読 & 180日以内' :
       feedList.filterMode === 'unread' ? '未読のみ' : 'すべて表示';
