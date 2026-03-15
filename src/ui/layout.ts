@@ -136,11 +136,11 @@ export function applyLayout(layout: Layout, mode: LayoutMode): void {
     (entryPane as unknown as { position: P }).position.top    = 0;
     (entryPane as unknown as { position: P }).position.left   = '33%';
     (entryPane as unknown as { position: P }).position.width  = '67%';
-    (entryPane as unknown as { position: P }).position.height = '50%';
+    (entryPane as unknown as { position: P }).position.height = '33%';
 
-    (contentPane as unknown as { position: P }).position.top    = '50%';
+    (contentPane as unknown as { position: P }).position.top    = '33%';
     (contentPane as unknown as { position: P }).position.left   = '33%';
     (contentPane as unknown as { position: P }).position.width  = '67%';
-    (contentPane as unknown as { position: P }).position.height = '50%-1';
+    (contentPane as unknown as { position: P }).position.height = '67%-1';
   }
 }
