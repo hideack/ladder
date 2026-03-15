@@ -272,10 +272,7 @@ export async function cmdUi(): Promise<void> {
           showPinned: priorShowPinned,
           filterMode: priorFilterMode,
         };
-        if (searchOriginPane !== 'feed' && query.trim()) {
-          focus = 'entry';
-          updateFocus();
-        }
+        updateFocus();
         resetStatus();
         return;
       }
