@@ -198,21 +198,57 @@ export async function cmdUi(): Promise<void> {
     process.exit(0);
   });
 
-  // Search
+  // Incremental Search
   screen.key(['/'], () => {
     if (searchMode || modalOpen) return;
     searchMode = true;
     let query = '';
-    setStatus('Search: ▋');
+    const searchOriginPane = focus;
+
+    // 検索開始前の状態を保存（Escape 時に復元するため）
+    const priorFeedId = entryList.getCurrentFeedId();
+    const priorShowPinned = entryList.isShowingPinned();
+    const priorFilterMode = feedList.filterMode;
+
+    // Feeds ペイン検索中は filterMode を一時的に 'all' にして既読フィードも対象にする
+    if (searchOriginPane === 'feed') {
+      feedList.filterMode = 'all';
+    }
+
+    setStatus(`/ ▋`);
+
+    function applySearch(q: string): void {
+      if (searchOriginPane === 'feed') {
+        feedList.filterByQuery(q);
+      } else {
+        if (q === '') {
+          // クエリが空になったら元のビューに戻す
+          if (priorFeedId != null) {
+            entryList.loadFeed(priorFeedId);
+          } else if (priorShowPinned) {
+            entryList.loadPinned();
+          }
+        } else {
+          entryList.loadSearch(q);
+        }
+      }
+      setStatus(`/ ${q}▋`);
+    }
 
     function onKeypress(ch: string, key: { name: string; sequence: string; ctrl: boolean }): void {
       if (key.name === 'enter') {
         screen.removeListener('keypress', onKeypress);
         searchMode = false;
-        if (query.trim()) {
-          entryList.loadSearch(query.trim());
-          focus = 'entry';
-          updateFocus();
+        feedList.filterMode = priorFilterMode;
+        if (searchOriginPane === 'feed') {
+          // Feeds ペイン: 確定後は通常ビューに戻す（フィルター復元済み）
+          feedList.clearSearch();
+        } else {
+          // Entries ペイン: 検索結果をそのまま維持してフォーカス移動
+          if (query.trim()) {
+            focus = 'entry';
+            updateFocus();
+          }
         }
         resetStatus();
         return;
@@ -220,17 +256,29 @@ export async function cmdUi(): Promise<void> {
       if (key.name === 'escape') {
         screen.removeListener('keypress', onKeypress);
         searchMode = false;
+        // filterMode を復元
+        feedList.filterMode = priorFilterMode;
+        // Feeds ペインの絞り込みを解除
+        feedList.clearSearch();
+        // Entries ペインを検索前のビューに戻す
+        if (searchOriginPane !== 'feed') {
+          if (priorFeedId != null) {
+            entryList.loadFeed(priorFeedId);
+          } else if (priorShowPinned) {
+            entryList.loadPinned();
+          }
+        }
         resetStatus();
         return;
       }
       if (key.name === 'backspace') {
         query = query.slice(0, -1);
-        setStatus(`Search: ${query}▋`);
+        applySearch(query);
         return;
       }
       if (ch && !key.ctrl && ch.length === 1) {
         query += ch;
-        setStatus(`Search: ${query}▋`);
+        applySearch(query);
       }
     }
 

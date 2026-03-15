@@ -17,6 +17,8 @@ export interface FeedListItem {
 
 export class FeedList {
   private items: FeedListItem[] = [];
+  private searchItems: FeedListItem[] | null = null;
+  private searchQuery: string | null = null;
   private selectedIndex = 0;
   private viewTop = 0;
   private collapsedCategories = new Set<number>();
@@ -24,6 +26,10 @@ export class FeedList {
 
   sortMode: SortMode = 'latest';
   filterMode: FilterMode = 'active';
+
+  private get displayItems(): FeedListItem[] {
+    return this.searchItems ?? this.items;
+  }
 
   constructor(
     private pane: blessed.Widgets.BoxElement,
@@ -39,9 +45,37 @@ export class FeedList {
     const feeds = this.q.getAllFeedsWithLatest();
     const categories = this.q.getCategories();
     this.items = this.buildItems(feeds, categories);
-    // items が縮んだ場合にインデックスを有効範囲に収める
-    this.selectedIndex = Math.min(this.selectedIndex, Math.max(0, this.items.length - 1));
+    // displayItems が縮んだ場合にインデックスを有効範囲に収める
+    this.selectedIndex = Math.min(this.selectedIndex, Math.max(0, this.displayItems.length - 1));
     this.render();
+  }
+
+  filterByQuery(query: string): void {
+    this.searchQuery = query;
+    const q = query.toLowerCase();
+    const feeds = this.q.getAllFeedsWithLatest();
+    const matched = feeds.filter((f) => {
+      const title = (f.title || '').toLowerCase();
+      try {
+        const hostname = new URL(f.url).hostname.toLowerCase();
+        return title.includes(q) || hostname.includes(q);
+      } catch {
+        return title.includes(q);
+      }
+    });
+    const sorted = this.sortFeeds(matched);
+    this.searchItems = sorted.map((feed) => ({ type: 'feed' as const, feed, indent: 0 }));
+    this.selectedIndex = 0;
+    this.viewTop = 0;
+    this.render();
+  }
+
+  clearSearch(): void {
+    this.searchQuery = null;
+    this.searchItems = null;
+    this.selectedIndex = 0;
+    this.viewTop = 0;
+    this.refresh();
   }
 
   private sortFeeds<T extends Feed & { latest_entry_at?: number | null }>(feeds: T[]): T[] {
@@ -151,7 +185,8 @@ export class FeedList {
   }
 
   render(): void {
-    const lines = this.items.map((item, i) => this.formatItem(item, i));
+    const displayItems = this.displayItems;
+    const lines = displayItems.map((item, i) => this.formatItem(item, i));
     this.pane.setContent('');
     this.pane.setContent(lines.join('\n'));
 
@@ -164,15 +199,19 @@ export class FeedList {
     }
     this.pane.scrollTo(this.viewTop);
 
-    // ラベル: 未読合計 + 現在のソート/フィルタ状態
-    const feeds = this.q.getAllFeeds();
-    const totalUnread = feeds.reduce((sum, f) => sum + f.unread_count, 0);
-    const sortLabel = this.sortMode === 'unread' ? 'unread' : 'latest';
-    const filterLabel =
-      this.filterMode === 'active' ? ' {red-fg}active{/red-fg}' :
-      this.filterMode === 'unread' ? ' {yellow-fg}unread{/yellow-fg}' : '';
-    const unreadLabel = totalUnread > 0 ? ` {blue-fg}(${totalUnread}){/blue-fg}` : '';
-    this.pane.setLabel(` Feeds${unreadLabel} {gray-fg}[${sortLabel}]${filterLabel}{/gray-fg} `);
+    // ラベル: 検索中は検索クエリを表示、通常は未読合計 + ソート/フィルタ状態
+    if (this.searchQuery !== null) {
+      this.pane.setLabel(` Feeds: /${this.searchQuery} `);
+    } else {
+      const feeds = this.q.getAllFeeds();
+      const totalUnread = feeds.reduce((sum, f) => sum + f.unread_count, 0);
+      const sortLabel = this.sortMode === 'unread' ? 'unread' : 'latest';
+      const filterLabel =
+        this.filterMode === 'active' ? ' {red-fg}active{/red-fg}' :
+        this.filterMode === 'unread' ? ' {yellow-fg}unread{/yellow-fg}' : '';
+      const unreadLabel = totalUnread > 0 ? ` {blue-fg}(${totalUnread}){/blue-fg}` : '';
+      this.pane.setLabel(` Feeds${unreadLabel} {gray-fg}[${sortLabel}]${filterLabel}{/gray-fg} `);
+    }
 
     this.pane.screen.render();
   }
@@ -191,7 +230,7 @@ export class FeedList {
   }
 
   moveDown(): void {
-    if (this.selectedIndex < this.items.length - 1) {
+    if (this.selectedIndex < this.displayItems.length - 1) {
       this.selectedIndex++;
       this.render();
     }
@@ -206,7 +245,7 @@ export class FeedList {
 
   movePageDown(): void {
     const pageSize = Math.max(1, (this.pane.height as number) - 2);
-    this.selectedIndex = Math.min(this.items.length - 1, this.selectedIndex + pageSize);
+    this.selectedIndex = Math.min(this.displayItems.length - 1, this.selectedIndex + pageSize);
     this.render();
   }
 
@@ -217,7 +256,7 @@ export class FeedList {
   }
 
   getSelected(): FeedListItem | undefined {
-    return this.items[this.selectedIndex];
+    return this.displayItems[this.selectedIndex];
   }
 
   toggleCollapse(): void {
