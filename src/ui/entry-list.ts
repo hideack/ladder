@@ -8,6 +8,7 @@ export class EntryList {
   private q: Queries;
   private currentFeedId: number | null = null;
   private showPinned = false;
+  private searchQuery: string | null = null;
 
   constructor(
     private pane: blessed.Widgets.BoxElement,
@@ -19,6 +20,7 @@ export class EntryList {
   loadFeed(feedId: number): void {
     this.currentFeedId = feedId;
     this.showPinned = false;
+    this.searchQuery = null;
     this.entries = this.q.getEntriesByFeed(feedId, 100);
     this.selectedIndex = 0;
     this.viewTop = 0;
@@ -28,16 +30,18 @@ export class EntryList {
   loadPinned(): void {
     this.currentFeedId = null;
     this.showPinned = true;
+    this.searchQuery = null;
     this.entries = this.q.getPinnedEntries(100);
     this.selectedIndex = 0;
     this.viewTop = 0;
     this.render();
   }
 
-  loadSearch(query: string): void {
-    this.currentFeedId = null;
+  loadSearch(query: string, feedId?: number): void {
+    this.currentFeedId = feedId ?? null;
     this.showPinned = false;
-    const results = this.q.searchEntries(query, 50);
+    this.searchQuery = query;
+    const results = this.q.searchEntries(query, 50, feedId);
     this.entries = results;
     this.selectedIndex = 0;
     this.viewTop = 0;
@@ -88,7 +92,9 @@ export class EntryList {
     }
     this.pane.scrollTo(this.viewTop);
 
-    const label = this.showPinned
+    const label = this.searchQuery !== null
+      ? ` Entries: /${this.searchQuery} `
+      : this.showPinned
       ? ' ★ Pinned '
       : this.currentFeedId != null
       ? ` Entries (${this.entries.length}) `
