@@ -1,5 +1,7 @@
 import blessed from 'neo-blessed';
 
+export type LayoutMode = 'horizontal' | 'vertical';
+
 export interface Layout {
   screen: blessed.Widgets.Screen;
   feedPane: blessed.Widgets.BoxElement;
@@ -102,4 +104,43 @@ export function createLayout(): Layout {
   });
 
   return { screen, feedPane, entryPane, contentPane, statusBar };
+}
+
+export function applyLayout(layout: Layout, mode: LayoutMode): void {
+  const { feedPane, entryPane, contentPane } = layout;
+  type P = { top: string | number; left: string | number; width: string | number; height: string | number };
+
+  if (mode === 'horizontal') {
+    // 従前: 3ペイン水平並び (25% / 35% / 40%)
+    (feedPane as unknown as { position: P }).position.top    = 0;
+    (feedPane as unknown as { position: P }).position.left   = 0;
+    (feedPane as unknown as { position: P }).position.width  = '25%';
+    (feedPane as unknown as { position: P }).position.height = '100%-1';
+
+    (entryPane as unknown as { position: P }).position.top    = 0;
+    (entryPane as unknown as { position: P }).position.left   = '25%';
+    (entryPane as unknown as { position: P }).position.width  = '35%';
+    (entryPane as unknown as { position: P }).position.height = '100%-1';
+
+    (contentPane as unknown as { position: P }).position.top    = 0;
+    (contentPane as unknown as { position: P }).position.left   = '60%';
+    (contentPane as unknown as { position: P }).position.width  = '40%';
+    (contentPane as unknown as { position: P }).position.height = '100%-1';
+  } else {
+    // 新レイアウト: 左1/3=フィード、右2/3を上下1:1=エントリー/コンテンツ
+    (feedPane as unknown as { position: P }).position.top    = 0;
+    (feedPane as unknown as { position: P }).position.left   = 0;
+    (feedPane as unknown as { position: P }).position.width  = '33%';
+    (feedPane as unknown as { position: P }).position.height = '100%-1';
+
+    (entryPane as unknown as { position: P }).position.top    = 0;
+    (entryPane as unknown as { position: P }).position.left   = '33%';
+    (entryPane as unknown as { position: P }).position.width  = '67%';
+    (entryPane as unknown as { position: P }).position.height = '50%';
+
+    (contentPane as unknown as { position: P }).position.top    = '50%';
+    (contentPane as unknown as { position: P }).position.left   = '33%';
+    (contentPane as unknown as { position: P }).position.width  = '67%';
+    (contentPane as unknown as { position: P }).position.height = '50%-1';
+  }
 }
