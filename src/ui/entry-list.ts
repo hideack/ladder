@@ -201,6 +201,14 @@ export class EntryList {
   getCurrentFeedId(): number | null {
     return this.currentFeedId;
   }
+
+  isShowingPinned(): boolean {
+    return this.showPinned;
+  }
+
+  getAllEntries(): Array<Entry & { feed_title?: string }> {
+    return this.entries;
+  }
 }
 
 function formatRelativeTime(unixSec: number): string {
