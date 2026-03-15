@@ -174,6 +174,10 @@ export class Queries {
       .all(limit) as Entry[];
   }
 
+  unpinAll(): void {
+    this.db.prepare('UPDATE entries SET is_pinned = 0 WHERE is_pinned = 1').run();
+  }
+
   searchEntries(
     query: string,
     limit = 20

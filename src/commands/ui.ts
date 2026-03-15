@@ -63,6 +63,7 @@ export async function cmdUi(): Promise<void> {
         '  {bold}j / k{/bold}      フォーカス依存: Feedペイン→フィード移動 / 他→エントリー移動',
         '  {bold}J / K{/bold}      同上・ページ単位移動',
         '  {bold}p{/bold}          ピン留めトグル',
+        '  {bold}P{/bold}          ピン一覧を全部ブラウザで開いてピン解放',
         '  {bold}Space{/bold}      未読記事を順に読む (次へ)',
         '  {bold}b{/bold}          逆方向ページ送り (前へ)',
         '  {bold}o{/bold}          ブラウザで開く',
@@ -101,7 +102,7 @@ export async function cmdUi(): Promise<void> {
 
   function resetStatus(): void {
     statusBar.setContent(
-      ' {bold}n{/bold}:feed-next  {bold}j/k{/bold}:move  {bold}J/K{/bold}:page  {bold}Spc/b{/bold}:read  {bold}o{/bold}:browser  {bold}p{/bold}:pin  {bold}a{/bold}:category  {bold}C{/bold}:cat-mgr  {bold}/{/bold}:search  {bold}?{/bold}:help  {bold}q{/bold}:quit'
+      ' {bold}n{/bold}:feed-next  {bold}j/k{/bold}:move  {bold}J/K{/bold}:page  {bold}Spc/b{/bold}:read  {bold}o{/bold}:browser  {bold}p{/bold}:pin  {bold}P{/bold}:open-all-pins  {bold}a{/bold}:category  {bold}C{/bold}:cat-mgr  {bold}/{/bold}:search  {bold}?{/bold}:help  {bold}q{/bold}:quit'
     );
     screen.render();
   }
@@ -511,6 +512,30 @@ export async function cmdUi(): Promise<void> {
     setTimeout(() => resetStatus(), 1500);
   });
 
+  // P (S-p): ピン一覧表示中にすべての記事をブラウザで開いてピンを解放
+  screen.key(['S-p'], () => {
+    if (searchMode || modalOpen) return;
+    if (!entryList.isShowingPinned()) return;
+
+    const pinned = entryList.getAllEntries().filter((e) => e.url);
+    if (pinned.length === 0) {
+      setStatus('No pinned entries');
+      setTimeout(() => resetStatus(), 1500);
+      return;
+    }
+
+    let opened = 0;
+    for (const entry of pinned) {
+      if (entry.url && openUrlInBrowser(entry.url)) opened++;
+    }
+
+    q.unpinAll();
+    feedList.refresh();
+    entryList.loadPinned();
+    setStatus(`Opened ${opened} pinned entries in browser — pins cleared`);
+    setTimeout(() => resetStatus(), 3000);
+  });
+
   entryPane.key(['u'], () => {
     if (focus !== 'entry') return;
     entryList.toggleReadSelected();
@@ -539,35 +564,34 @@ export async function cmdUi(): Promise<void> {
     setTimeout(() => resetStatus(), 1500);
   });
 
+  // URL を検証して安全にブラウザで開く。成功時 true を返す
+  function openUrlInBrowser(url: string): boolean {
+    let parsedUrl: URL;
+    try {
+      parsedUrl = new URL(url);
+    } catch {
+      return false;
+    }
+    if (parsedUrl.protocol !== 'http:' && parsedUrl.protocol !== 'https:') {
+      return false;
+    }
+
+    const platform = process.platform;
+    const [cmd, args] =
+      platform === 'darwin' ? ['open', [url]] :
+      platform === 'win32'  ? ['cmd', ['/c', 'start', '', url]] :
+                              ['xdg-open', [url]];
+
+    const result = spawnSync(cmd, args, { stdio: 'ignore' });
+    return !result.error;
+  }
+
   function openInBrowser(): void {
     const entry = entryList.getSelected();
     if (!entry?.url) return;
 
-    // URL を検証: http/https スキームのみ許可してシェルインジェクションを防ぐ
-    let parsedUrl: URL;
-    try {
-      parsedUrl = new URL(entry.url);
-    } catch {
-      setStatus(`Invalid URL: ${entry.url}`);
-      setTimeout(() => resetStatus(), 2000);
-      return;
-    }
-    if (parsedUrl.protocol !== 'http:' && parsedUrl.protocol !== 'https:') {
-      setStatus(`Blocked non-http URL: ${parsedUrl.protocol}`);
-      setTimeout(() => resetStatus(), 2000);
-      return;
-    }
-
-    // execSync に文字列結合せず spawnSync で引数を配列渡し（コマンドインジェクション対策）
-    const platform = process.platform;
-    const [cmd, args] =
-      platform === 'darwin' ? ['open', [entry.url]] :
-      platform === 'win32'  ? ['cmd', ['/c', 'start', '', entry.url]] :
-                              ['xdg-open', [entry.url]];
-
-    const result = spawnSync(cmd, args, { stdio: 'ignore' });
-    if (result.error) {
-      setStatus(`Could not open browser`);
+    if (!openUrlInBrowser(entry.url)) {
+      setStatus(`Could not open: ${entry.url}`);
       setTimeout(() => resetStatus(), 2000);
     }
   }
