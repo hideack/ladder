@@ -32,6 +32,14 @@ function resolveTsxBin(): string {
   }
 }
 
+function resolveNodeBin(): string {
+  try {
+    return execSync('which node', { encoding: 'utf8' }).trim();
+  } catch {
+    return 'node';
+  }
+}
+
 function buildPlist(intervalSec: number): string {
   const ladderBin = resolveLadderBin();
   // Use tsx + script path when running via tsx in dev
@@ -39,9 +47,11 @@ function buildPlist(intervalSec: number): string {
   let programArgs: string[];
   if (isTsx) {
     const tsxBin = resolveTsxBin();
+    // tsx is a Node.js script — launchd needs the absolute node path to exec it
+    const nodeBin = resolveNodeBin();
     programArgs = tsxBin === 'npx'
-      ? ['npx', 'tsx', process.argv[1], 'fetch']
-      : [tsxBin, process.argv[1], 'fetch'];
+      ? [nodeBin, '--import', 'tsx', process.argv[1], 'fetch']
+      : [nodeBin, tsxBin, process.argv[1], 'fetch'];
   } else {
     programArgs = [ladderBin, 'fetch'];
   }
@@ -49,6 +59,9 @@ function buildPlist(intervalSec: number): string {
   const args = programArgs
     .map((a) => `    <string>${a}</string>`)
     .join('\n');
+
+  // Pass the current PATH so launchd can resolve any remaining binaries
+  const envPath = process.env.PATH ?? '/usr/local/bin:/usr/bin:/bin';
 
   return `<?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
@@ -60,6 +73,11 @@ function buildPlist(intervalSec: number): string {
   <array>
 ${args}
   </array>
+  <key>EnvironmentVariables</key>
+  <dict>
+    <key>PATH</key>
+    <string>${envPath}</string>
+  </dict>
   <key>StartInterval</key>
   <integer>${intervalSec}</integer>
   <key>StandardOutPath</key>
