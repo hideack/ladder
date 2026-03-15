@@ -76,7 +76,7 @@ export async function cmdUi(): Promise<void> {
         '  {bold}P{/bold}          ピン一覧を全部ブラウザで開いてピン解放',
         '  {bold}Space{/bold}      未読記事を順に読む (次へ)',
         '  {bold}b{/bold}          逆方向ページ送り (前へ)',
-        '  {bold}o{/bold}          ブラウザで開く',
+        '  {bold}v{/bold}          ブラウザで開く',
         '',
         ' {bold}{cyan-fg}── Feeds ペイン ────────────────────────{/cyan-fg}{/bold}',
         '  {bold}↓ / ↑{/bold}      フィード・カテゴリ移動',
@@ -112,7 +112,7 @@ export async function cmdUi(): Promise<void> {
 
   function resetStatus(): void {
     statusBar.setContent(
-      ' {bold}n{/bold}:feed-next  {bold}j/k{/bold}:move  {bold}J/K{/bold}:page  {bold}Spc/b{/bold}:read  {bold}o{/bold}:browser  {bold}p{/bold}:pin  {bold}P{/bold}:open-all-pins  {bold}a{/bold}:category  {bold}C{/bold}:cat-mgr  {bold}l{/bold}:layout  {bold}/{/bold}:search  {bold}?{/bold}:help  {bold}q{/bold}:quit'
+      ' {bold}n{/bold}:feed-next  {bold}j/k{/bold}:move  {bold}J/K{/bold}:page  {bold}Spc/b{/bold}:read  {bold}v{/bold}:browser  {bold}p{/bold}:pin  {bold}P{/bold}:open-all-pins  {bold}a{/bold}:category  {bold}C{/bold}:cat-mgr  {bold}l{/bold}:layout  {bold}/{/bold}:search  {bold}?{/bold}:help  {bold}q{/bold}:quit'
     );
     screen.render();
   }
@@ -618,13 +618,8 @@ export async function cmdUi(): Promise<void> {
     }
   }
 
-  entryPane.key(['v'], () => {
-    if (focus !== 'entry') return;
-    openInBrowser();
-  });
-
-  // o: ブラウザで開く（どのペインからでも）
-  screen.key(['o'], () => {
+  // v: ブラウザで開く（どのペインからでも）
+  screen.key(['v'], () => {
     if (searchMode || modalOpen) return;
     openInBrowser();
   });
