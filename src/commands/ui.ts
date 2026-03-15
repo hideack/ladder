@@ -512,12 +512,11 @@ export async function cmdUi(): Promise<void> {
     setTimeout(() => resetStatus(), 1500);
   });
 
-  // P (S-p): ピン一覧表示中にすべての記事をブラウザで開いてピンを解放
+  // P (S-p): すべてのピン済み記事をブラウザで開いてピンを解放
   screen.key(['S-p'], () => {
     if (searchMode || modalOpen) return;
-    if (!entryList.isShowingPinned()) return;
 
-    const pinned = entryList.getAllEntries().filter((e) => e.url);
+    const pinned = q.getPinnedEntries(100).filter((e) => e.url);
     if (pinned.length === 0) {
       setStatus('No pinned entries');
       setTimeout(() => resetStatus(), 1500);
