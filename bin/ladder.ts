@@ -10,6 +10,7 @@ import { cmdImportUrls } from '../src/commands/import-urls.js';
 import { openDb } from '../src/db/schema.js';
 import { Queries } from '../src/db/queries.js';
 import { startMcpServer } from '../src/mcp/server.js';
+import { cmdDaemonInstall, cmdDaemonUninstall, cmdDaemonStatus } from '../src/commands/daemon.js';
 
 const program = new Command();
 
@@ -89,6 +90,31 @@ program
     const q = new Queries(db);
     const deleted = q.purgeEntries(days);
     console.log(`Purged ${deleted} entries older than ${days} days.`);
+  });
+
+// ── daemon ────────────────────────────────────────────────────────────────────
+const daemon = program.command('daemon').description('Manage the launchd fetch daemon (macOS)');
+
+daemon
+  .command('install')
+  .description('Install and start the periodic fetch daemon')
+  .option('--interval <minutes>', 'Fetch interval in minutes', '15')
+  .action((options: { interval: string }) => {
+    cmdDaemonInstall(options);
+  });
+
+daemon
+  .command('uninstall')
+  .description('Stop and remove the fetch daemon')
+  .action(() => {
+    cmdDaemonUninstall();
+  });
+
+daemon
+  .command('status')
+  .description('Show daemon status')
+  .action(() => {
+    cmdDaemonStatus();
   });
 
 // ── mcp ───────────────────────────────────────────────────────────────────────
