@@ -31,6 +31,9 @@ export async function cmdUi(): Promise<void> {
   let modalOpen = false;
   let layoutMode: LayoutMode = uiState.layoutMode;
 
+  // 検索 Enter 確定直後のフラグ（feedPane.key['enter'] との二重発火を防ぐ）
+  let searchJustConfirmed = false;
+
   // 検索確定後の復元用状態（Esc で通常ビューに戻すために保持）
   let searchRestoreState: {
     originPane: 'feed' | 'entry' | 'content';
@@ -264,6 +267,9 @@ export async function cmdUi(): Promise<void> {
       if (key.name === 'enter') {
         screen.removeListener('keypress', onKeypress);
         searchMode = false;
+        // feedPane.key['enter'] との二重発火を防ぐ（同一tick内ブロック）
+        searchJustConfirmed = true;
+        setImmediate(() => { searchJustConfirmed = false; });
         feedList.filterMode = priorFilterMode;
         // 検索結果をそのまま維持し、Esc で戻れるように復元情報を保存
         searchRestoreState = {
@@ -370,7 +376,7 @@ export async function cmdUi(): Promise<void> {
   });
 
   feedPane.key(['enter'], () => {
-    if (focus !== 'feed') return;
+    if (searchJustConfirmed || focus !== 'feed') return;
     const selected = feedList.getSelected();
     if (!selected) return;
 
