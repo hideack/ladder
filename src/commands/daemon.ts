@@ -85,7 +85,7 @@ ${args}
   <key>StandardErrorPath</key>
   <string>${LOG_PATH}</string>
   <key>RunAtLoad</key>
-  <false/>
+  <true/>
 </dict>
 </plist>
 `;
