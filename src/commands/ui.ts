@@ -5,7 +5,7 @@ import { Queries } from '../db/queries.js';
 import { crawlFeed } from '../crawler/index.js';
 import { createLayout, applyLayout, LayoutMode } from '../ui/layout.js';
 import { loadUiState, saveUiState } from '../ui/ui-state.js';
-import { FeedList } from '../ui/feed-list.js';
+import { FeedList, FilterMode } from '../ui/feed-list.js';
 import { EntryList } from '../ui/entry-list.js';
 import { EntryView } from '../ui/entry-view.js';
 import { showCategoryPicker } from '../ui/category-picker.js';
@@ -30,6 +30,14 @@ export async function cmdUi(): Promise<void> {
   let helpVisible = false;
   let modalOpen = false;
   let layoutMode: LayoutMode = uiState.layoutMode;
+
+  // 検索確定後の復元用状態（Esc で通常ビューに戻すために保持）
+  let searchRestoreState: {
+    originPane: 'feed' | 'entry' | 'content';
+    feedId: number | null;
+    showPinned: boolean;
+    filterMode: FilterMode;
+  } | null = null;
 
   // 前回のレイアウトを復元
   if (layoutMode !== 'horizontal') {
@@ -155,6 +163,23 @@ export async function cmdUi(): Promise<void> {
     previewSelectedEntry();
   }
 
+  // Escape: 検索確定後の絞り込み状態を解除して通常ビューに戻す
+  screen.key(['escape'], () => {
+    if (searchMode || modalOpen) return; // 検索入力中・モーダル中は onKeypress 側で処理
+    if (searchRestoreState === null) return;
+    const { originPane, feedId, showPinned, filterMode } = searchRestoreState;
+    searchRestoreState = null;
+    feedList.filterMode = filterMode;
+    feedList.clearSearch();
+    if (originPane !== 'feed') {
+      if (feedId != null) {
+        entryList.loadFeed(feedId);
+      } else if (showPinned) {
+        entryList.loadPinned();
+      }
+    }
+  });
+
   // Tab: cycle focus forward
   screen.key(['tab'], () => {
     if (searchMode || modalOpen) return;
@@ -240,15 +265,16 @@ export async function cmdUi(): Promise<void> {
         screen.removeListener('keypress', onKeypress);
         searchMode = false;
         feedList.filterMode = priorFilterMode;
-        if (searchOriginPane === 'feed') {
-          // Feeds ペイン: 確定後は通常ビューに戻す（フィルター復元済み）
-          feedList.clearSearch();
-        } else {
-          // Entries ペイン: 検索結果をそのまま維持してフォーカス移動
-          if (query.trim()) {
-            focus = 'entry';
-            updateFocus();
-          }
+        // 検索結果をそのまま維持し、Esc で戻れるように復元情報を保存
+        searchRestoreState = {
+          originPane: searchOriginPane,
+          feedId: priorFeedId,
+          showPinned: priorShowPinned,
+          filterMode: priorFilterMode,
+        };
+        if (searchOriginPane !== 'feed' && query.trim()) {
+          focus = 'entry';
+          updateFocus();
         }
         resetStatus();
         return;
@@ -256,6 +282,7 @@ export async function cmdUi(): Promise<void> {
       if (key.name === 'escape') {
         screen.removeListener('keypress', onKeypress);
         searchMode = false;
+        searchRestoreState = null;
         // filterMode を復元
         feedList.filterMode = priorFilterMode;
         // Feeds ペインの絞り込みを解除
