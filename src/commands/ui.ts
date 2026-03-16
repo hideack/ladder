@@ -69,8 +69,8 @@ export async function cmdUi(): Promise<void> {
       content: [
         '',
         ' {bold}{yellow-fg}── Global ──────────────────────────────{/yellow-fg}{/bold}',
-        '  {bold}Tab{/bold}        次のペインへフォーカス移動',
-        '  {bold}S-Tab{/bold}      前のペインへフォーカス移動',
+        '  {bold}Tab{/bold}        Feeds ↔ Entries フォーカス切替',
+        '  {bold}S-Tab{/bold}      Entries ↔ Feeds フォーカス切替',
         '  {bold}q / C-c{/bold}   終了',
         '  {bold}r{/bold}          選択フィードをリロード',
         '  {bold}R{/bold}          全フィードをリロード',
@@ -183,21 +183,17 @@ export async function cmdUi(): Promise<void> {
     }
   });
 
-  // Tab: cycle focus forward
+  // Tab: cycle focus forward (feed ↔ entry only)
   screen.key(['tab'], () => {
     if (searchMode || modalOpen) return;
-    if (focus === 'feed') focus = 'entry';
-    else if (focus === 'entry') focus = 'content';
-    else focus = 'feed';
+    focus = focus === 'feed' ? 'entry' : 'feed';
     updateFocus();
   });
 
-  // Shift+Tab: cycle focus backward
+  // Shift+Tab: cycle focus backward (feed ↔ entry only)
   screen.key(['S-tab'], () => {
     if (searchMode || modalOpen) return;
-    if (focus === 'feed') focus = 'content';
-    else if (focus === 'content') focus = 'entry';
-    else focus = 'feed';
+    focus = focus === 'entry' ? 'feed' : 'entry';
     updateFocus();
   });
 
