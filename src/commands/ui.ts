@@ -732,10 +732,15 @@ export async function cmdUi(): Promise<void> {
     const nextFeed = feedList.getNextFeedWithUnread(currentFeedId);
     if (!nextFeed) {
       setStatus('No more unread entries');
+      feedList.setKeepVisibleFeed(null);
+      focus = 'feed';
+      updateFocus();
       setTimeout(() => resetStatus(), 2000);
       return;
     }
 
+    // 次フィードを「読み進め中」としてマーク（フィルタで消えないよう保持）
+    feedList.setKeepVisibleFeed(nextFeed.id);
     feedList.selectFeedById(nextFeed.id);
     entryList.loadFeed(nextFeed.id);
     const firstUnread = entryList.firstUnread();
@@ -787,6 +792,8 @@ export async function cmdUi(): Promise<void> {
       }
       const firstUnread = entryList.firstUnread();
       if (firstUnread) {
+        // このフィードを「読み進め中」としてマーク（unread_count が 0 になってもリストから消えないようにする）
+        feedList.setKeepVisibleFeed(sel.feed.id);
         openSelectedEntry();
         focus = 'content';
         updateFocus();

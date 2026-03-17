@@ -23,6 +23,8 @@ export class FeedList {
   private viewTop = 0;
   private collapsedCategories = new Set<number>();
   private q: Queries;
+  // Space キーで読み進め中のフィードID。unread_count が 0 になっても items から消さない
+  private keepVisibleFeedId: number | null = null;
 
   sortMode: SortMode = 'latest';
   filterMode: FilterMode = 'active';
@@ -42,11 +44,29 @@ export class FeedList {
   }
 
   refresh(): void {
+    // 現在選択中のアイテムを ID で記録しておく（並び替え・フィルタ変化後も復元するため）
+    const currentItem = this.displayItems[this.selectedIndex];
+    const selectedFeedId = currentItem?.type === 'feed' ? currentItem.feed?.id : undefined;
+    const selectedCatId = currentItem?.type === 'category' ? currentItem.categoryId : undefined;
+
     const feeds = this.q.getAllFeedsWithLatest();
     const categories = this.q.getCategories();
     this.items = this.buildItems(feeds, categories);
-    // displayItems が縮んだ場合にインデックスを有効範囲に収める
-    this.selectedIndex = Math.min(this.selectedIndex, Math.max(0, this.displayItems.length - 1));
+
+    // ID でもとの選択アイテムを探して復元する
+    if (selectedFeedId != null) {
+      const idx = this.displayItems.findIndex(
+        (item) => item.type === 'feed' && item.feed?.id === selectedFeedId
+      );
+      this.selectedIndex = idx !== -1 ? idx : Math.min(this.selectedIndex, Math.max(0, this.displayItems.length - 1));
+    } else if (selectedCatId != null) {
+      const idx = this.displayItems.findIndex(
+        (item) => item.type === 'category' && item.categoryId === selectedCatId
+      );
+      this.selectedIndex = idx !== -1 ? idx : Math.min(this.selectedIndex, Math.max(0, this.displayItems.length - 1));
+    } else {
+      this.selectedIndex = Math.min(this.selectedIndex, Math.max(0, this.displayItems.length - 1));
+    }
     this.render();
   }
 
@@ -95,6 +115,8 @@ export class FeedList {
     // フィルタ適用
     const now = Math.floor(Date.now() / 1000);
     const visibleFeeds = feeds.filter((f) => {
+      // Space 読み進め中のフィードは unread_count が 0 でも常に表示する
+      if (f.id === this.keepVisibleFeedId) return true;
       if (this.filterMode === 'active') {
         return f.unread_count > 0 && (f.latest_entry_at != null && now - f.latest_entry_at <= STALE_THRESHOLD_SEC);
       }
@@ -291,6 +313,10 @@ export class FeedList {
     const item = this.getSelected();
     if (item?.type === 'category' && item.categoryId != null) return item.categoryId;
     return null;
+  }
+
+  setKeepVisibleFeed(feedId: number | null): void {
+    this.keepVisibleFeedId = feedId;
   }
 
   getNextFeedWithUnread(afterFeedId: number | null): (Feed & { latest_entry_at?: number | null }) | null {
