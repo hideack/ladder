@@ -3,6 +3,7 @@ import blessed from 'neo-blessed';
 import { openDb } from '../db/schema.js';
 import { Queries } from '../db/queries.js';
 import { crawlFeed } from '../crawler/index.js';
+import { fetchArticleContent } from '../crawler/content-fetcher.js';
 import { createLayout, applyLayout, LayoutMode } from '../ui/layout.js';
 import { loadUiState, saveUiState } from '../ui/ui-state.js';
 import { FeedList, FilterMode } from '../ui/feed-list.js';
@@ -30,6 +31,8 @@ export async function cmdUi(): Promise<void> {
   let helpVisible = false;
   let modalOpen = false;
   let layoutMode: LayoutMode = uiState.layoutMode;
+  // e キー: フィードコンテンツ表示 ↔ 全文フェッチ表示のトグル状態
+  let fetchedContentMode = false;
 
   // 検索 Enter 確定直後のフラグ（feedPane.key['enter'] との二重発火を防ぐ）
   let searchJustConfirmed = false;
@@ -88,6 +91,7 @@ export async function cmdUi(): Promise<void> {
         '  {bold}Space{/bold}      未読記事を順に読む (次へ)',
         '  {bold}b{/bold}          逆方向ページ送り (前へ)',
         '  {bold}v{/bold}          ブラウザで開く',
+        '  {bold}e{/bold}          全文フェッチ表示 (再押しで元に戻す)',
         '',
         ' {bold}{cyan-fg}── Feeds ペイン ────────────────────────{/cyan-fg}{/bold}',
         '  {bold}↓ / ↑{/bold}      フィード・カテゴリ移動',
@@ -123,7 +127,7 @@ export async function cmdUi(): Promise<void> {
 
   function resetStatus(): void {
     statusBar.setContent(
-      ' {bold}n{/bold}:feed-next  {bold}j/k{/bold}:move  {bold}J/K{/bold}:page  {bold}Spc/b{/bold}:read  {bold}v{/bold}:browser  {bold}p{/bold}:pin  {bold}P{/bold}:open-all-pins  {bold}a{/bold}:category  {bold}C{/bold}:cat-mgr  {bold}l{/bold}:layout  {bold}/{/bold}:search  {bold}?{/bold}:help  {bold}q{/bold}:quit'
+      ' {bold}n{/bold}:feed-next  {bold}j/k{/bold}:move  {bold}J/K{/bold}:page  {bold}Spc/b{/bold}:read  {bold}v{/bold}:browser  {bold}e{/bold}:full-article  {bold}p{/bold}:pin  {bold}P{/bold}:open-all-pins  {bold}a{/bold}:category  {bold}C{/bold}:cat-mgr  {bold}l{/bold}:layout  {bold}/{/bold}:search  {bold}?{/bold}:help  {bold}q{/bold}:quit'
     );
     screen.render();
   }
@@ -146,6 +150,7 @@ export async function cmdUi(): Promise<void> {
     if (!entry) return;
     entryList.markSelectedAsRead();
     feedList.refresh();
+    fetchedContentMode = false;
 
     const feedRecord = entry.feed_id ? q.getFeedById(entry.feed_id) : undefined;
     const entryWithFeed = { ...entry, feed_title: feedRecord?.title ?? '' };
@@ -156,6 +161,7 @@ export async function cmdUi(): Promise<void> {
   function previewSelectedEntry(): void {
     const entry = entryList.getSelected();
     if (!entry) return;
+    fetchedContentMode = false;
     const feedRecord = entry.feed_id ? q.getFeedById(entry.feed_id) : undefined;
     entryView.show({ ...entry, feed_title: feedRecord?.title ?? '' });
   }
@@ -696,6 +702,43 @@ export async function cmdUi(): Promise<void> {
   screen.key(['v'], () => {
     if (searchMode || modalOpen) return;
     openInBrowser();
+  });
+
+  // e: 記事本文の全文をサイトから取得して表示（再押しでフィードコンテンツに戻る）
+  screen.key(['e'], () => {
+    if (searchMode || modalOpen) return;
+    const entry = entryList.getSelected();
+    if (!entry || !entry.url) {
+      setStatus('No URL available for this entry');
+      setTimeout(() => resetStatus(), 2000);
+      return;
+    }
+
+    if (fetchedContentMode) {
+      // 全文表示中 → フィードコンテンツに戻す
+      fetchedContentMode = false;
+      const feedRecord = entry.feed_id ? q.getFeedById(entry.feed_id) : undefined;
+      entryView.show({ ...entry, feed_title: feedRecord?.title ?? '' });
+      resetStatus();
+      return;
+    }
+
+    // 全文フェッチ開始
+    setStatus(`Fetching full article… ${entry.url}`);
+    fetchArticleContent(entry.url)
+      .then((text) => {
+        fetchedContentMode = true;
+        const feedRecord = entry.feed_id ? q.getFeedById(entry.feed_id) : undefined;
+        entryView.showFetched({ ...entry, feed_title: feedRecord?.title ?? '' }, text);
+        focus = 'content';
+        updateFocus();
+        resetStatus();
+      })
+      .catch((err: unknown) => {
+        const msg = err instanceof Error ? err.message : String(err);
+        setStatus(`Fetch failed: ${msg}`);
+        setTimeout(() => resetStatus(), 3000);
+      });
   });
 
   // ── Space: sequential unread reading ──────────────────────────────────────
