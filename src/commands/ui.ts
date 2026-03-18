@@ -764,9 +764,9 @@ export async function cmdUi(): Promise<void> {
     // 現フィード内の次の未読へ
     const next = entryList.nextUnread();
     if (next) {
-      openSelectedEntry();
       focus = 'content';
       updateFocus();
+      openSelectedEntry();
       return;
     }
 
@@ -788,9 +788,9 @@ export async function cmdUi(): Promise<void> {
     entryList.loadFeed(nextFeed.id);
     const firstUnread = entryList.firstUnread();
     if (firstUnread) {
-      openSelectedEntry();
       focus = 'content';
       updateFocus();
+      openSelectedEntry();
     }
   }
 
@@ -811,9 +811,9 @@ export async function cmdUi(): Promise<void> {
 
     // コンテンツペイン以外: 前のエントリーを開いてコンテンツペインへ
     entryList.moveUp();
-    openSelectedEntry();
     focus = 'content';
     updateFocus();
+    openSelectedEntry();
   });
 
   screen.key(['space'], () => {
@@ -837,15 +837,19 @@ export async function cmdUi(): Promise<void> {
       if (firstUnread) {
         // このフィードを「読み進め中」としてマーク（unread_count が 0 になってもリストから消えないようにする）
         feedList.setKeepVisibleFeed(sel.feed.id);
-        openSelectedEntry();
         focus = 'content';
         updateFocus();
+        openSelectedEntry();
         return;
       }
     } else if (sel?.type === 'pinned') {
-      openSelectedEntry();
+      if (!entryList.getSelected()) {
+        advanceSpaceReading();
+        return;
+      }
       focus = 'content';
       updateFocus();
+      openSelectedEntry();
       return;
     }
 
