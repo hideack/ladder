@@ -97,7 +97,8 @@ export class Queries {
       Pick<Feed, 'title' | 'site_url' | 'description' | 'etag' | 'last_modified' | 'last_fetched_at' | 'error_count' | 'next_retry_at'>
     >
   ): void {
-    const keys = Object.keys(data) as Array<keyof typeof data>;
+    const ALLOWED_KEYS = ['title', 'site_url', 'description', 'etag', 'last_modified', 'last_fetched_at', 'error_count', 'next_retry_at'] as const;
+    const keys = (Object.keys(data) as string[]).filter((k): k is typeof ALLOWED_KEYS[number] => (ALLOWED_KEYS as readonly string[]).includes(k));
     if (keys.length === 0) return;
     const setClauses = keys.map((k) => `${k} = ?`).join(', ');
     const values = keys.map((k) => data[k]);
