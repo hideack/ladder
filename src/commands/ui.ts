@@ -97,7 +97,7 @@ export async function cmdUi(): Promise<void> {
         '  {bold}b{/bold}          逆方向ページ送り (前へ)',
         '  {bold}v{/bold}          ブラウザで開く',
         '  {bold}e{/bold}          全文フェッチ表示 (再押しで元に戻す)',
-        '  {bold}E{/bold}          AI 要約/翻訳 (日本語→要約, 他→日本語翻訳, 再押しで元に戻す)',
+        '  {bold}E{/bold}          AI summarize (ja) / translate to ja, toggle back',
         '',
         ' {bold}{cyan-fg}── Feeds ペイン ────────────────────────{/cyan-fg}{/bold}',
         '  {bold}↓ / ↑{/bold}      フィード・カテゴリ移動',
@@ -133,7 +133,7 @@ export async function cmdUi(): Promise<void> {
 
   function resetStatus(): void {
     statusBar.setContent(
-      ' {bold}n{/bold}:feed-next  {bold}j/k{/bold}:move  {bold}J/K{/bold}:page  {bold}Spc/b{/bold}:read  {bold}v{/bold}:browser  {bold}e{/bold}:full-article  {bold}E{/bold}:AI要約/翻訳  {bold}p{/bold}:pin  {bold}P{/bold}:open-all-pins  {bold}a{/bold}:category  {bold}C{/bold}:cat-mgr  {bold}l{/bold}:layout  {bold}/{/bold}:search  {bold}?{/bold}:help  {bold}q{/bold}:quit'
+      ' {bold}n{/bold}:feed-next  {bold}j/k{/bold}:move  {bold}J/K{/bold}:page  {bold}Spc/b{/bold}:read  {bold}v{/bold}:browser  {bold}e{/bold}:full-article  {bold}E{/bold}:ai-summarize/translate{bold}p{/bold}:pin  {bold}P{/bold}:open-all-pins  {bold}a{/bold}:category  {bold}C{/bold}:cat-mgr  {bold}l{/bold}:layout  {bold}/{/bold}:search  {bold}?{/bold}:help  {bold}q{/bold}:quit'
     );
     screen.render();
   }
@@ -784,7 +784,7 @@ export async function cmdUi(): Promise<void> {
       return;
     }
 
-    setStatus('AI 処理中… (要約 / 翻訳)');
+    setStatus('AI processing… (summarize / translate)');
     summarizeOrTranslate(sourceText)
       .then((aiText) => {
         aiProcessedMode = true;
@@ -796,7 +796,7 @@ export async function cmdUi(): Promise<void> {
       })
       .catch((err: unknown) => {
         const msg = err instanceof Error ? err.message : String(err);
-        setStatus(`AI 処理失敗: ${msg}`);
+        setStatus(`AI processing failed: ${msg}`);
         setTimeout(() => resetStatus(), 3000);
       });
   });

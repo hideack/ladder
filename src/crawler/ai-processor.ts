@@ -25,7 +25,7 @@ export function isJapanese(text: string): boolean {
  */
 export async function summarizeOrTranslate(text: string): Promise<string> {
   const japanese = isJapanese(text);
-  const label = japanese ? '要約' : '翻訳（日本語）';
+  const label = japanese ? 'Summary' : 'Translation (ja)';
 
   // テキストが長すぎる場合は先頭 8000 文字に制限
   const truncated = text.length > 8000 ? text.slice(0, 8000) + '\n\n[以下省略...]' : text;

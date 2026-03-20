@@ -61,7 +61,7 @@ export class EntryView {
       ``,
       `{gray-fg}${escapeMarkup(feedTitle)}${escapeMarkup(author)} · ${escapeMarkup(dateStr)}{/gray-fg}`,
       ``,
-      `{magenta-fg}[AI 処理済み]{/magenta-fg}`,
+      `{magenta-fg}[AI Processed]{/magenta-fg}`,
       `─`.repeat(40),
       ``,
       escapeMarkup(aiText),
