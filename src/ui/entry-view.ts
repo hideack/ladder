@@ -47,6 +47,33 @@ export class EntryView {
     this.pane.screen.render();
   }
 
+  /** AI で要約または翻訳したテキストを表示する（E キー押下時） */
+  showAiProcessed(entry: Entry & { feed_title?: string }, aiText: string): void {
+    const title = entry.title || '(no title)';
+    const feedTitle = entry.feed_title ?? '';
+    const dateStr = entry.published_at
+      ? new Date(entry.published_at * 1000).toLocaleString()
+      : 'Unknown date';
+    const author = entry.author ? ` · ${entry.author}` : '';
+
+    const content = [
+      `{bold}{cyan-fg}${escapeMarkup(title)}{/cyan-fg}{/bold}`,
+      ``,
+      `{gray-fg}${escapeMarkup(feedTitle)}${escapeMarkup(author)} · ${escapeMarkup(dateStr)}{/gray-fg}`,
+      ``,
+      `{magenta-fg}[AI Processed]{/magenta-fg}`,
+      `─`.repeat(40),
+      ``,
+      escapeMarkup(aiText),
+    ].join('\n');
+
+    this.pane.setContent('');
+    this.pane.setContent(content);
+    this.pane.setLabel(` Content {magenta-fg}[AI]{/magenta-fg} `);
+    this.pane.scrollTo(0);
+    this.pane.screen.render();
+  }
+
   /** サイトから取得した全文を表示する（e キー押下時） */
   showFetched(entry: Entry & { feed_title?: string }, fetchedText: string): void {
     const title = entry.title || '(no title)';

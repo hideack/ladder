@@ -4,4 +4,7 @@ dist/
 bin/ladder.cjs
 bin/ladder.js
 *.db
+*.log
+.env
+.env.local
 

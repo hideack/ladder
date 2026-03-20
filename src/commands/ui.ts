@@ -4,6 +4,7 @@ import { openDb } from '../db/schema.js';
 import { Queries } from '../db/queries.js';
 import { crawlFeed } from '../crawler/index.js';
 import { fetchArticleContent } from '../crawler/content-fetcher.js';
+import { summarizeOrTranslate } from '../crawler/ai-processor.js';
 import { createLayout, applyLayout, LayoutMode } from '../ui/layout.js';
 import { loadUiState, saveUiState } from '../ui/ui-state.js';
 import { FeedList, FilterMode } from '../ui/feed-list.js';
@@ -33,6 +34,10 @@ export async function cmdUi(): Promise<void> {
   let layoutMode: LayoutMode = uiState.layoutMode;
   // e キー: フィードコンテンツ表示 ↔ 全文フェッチ表示のトグル状態
   let fetchedContentMode = false;
+  // E キー: AI 要約/翻訳表示のトグル状態
+  let aiProcessedMode = false;
+  // AI 処理前のコンテキスト（元に戻すため保持）
+  let aiBaseText: string | null = null; // AI 処理に使ったテキスト（全文フェッチ済みテキスト or null）
 
   // 検索 Enter 確定直後のフラグ（feedPane.key['enter'] との二重発火を防ぐ）
   let searchJustConfirmed = false;
@@ -92,6 +97,7 @@ export async function cmdUi(): Promise<void> {
         '  {bold}b{/bold}          逆方向ページ送り (前へ)',
         '  {bold}v{/bold}          ブラウザで開く',
         '  {bold}e{/bold}          全文フェッチ表示 (再押しで元に戻す)',
+        '  {bold}E{/bold}          AI summarize (ja) / translate to ja, toggle back',
         '',
         ' {bold}{cyan-fg}── Feeds ペイン ────────────────────────{/cyan-fg}{/bold}',
         '  {bold}↓ / ↑{/bold}      フィード・カテゴリ移動',
@@ -127,7 +133,7 @@ export async function cmdUi(): Promise<void> {
 
   function resetStatus(): void {
     statusBar.setContent(
-      ' {bold}n{/bold}:feed-next  {bold}j/k{/bold}:move  {bold}J/K{/bold}:page  {bold}Spc/b{/bold}:read  {bold}v{/bold}:browser  {bold}e{/bold}:full-article  {bold}p{/bold}:pin  {bold}P{/bold}:open-all-pins  {bold}a{/bold}:category  {bold}C{/bold}:cat-mgr  {bold}l{/bold}:layout  {bold}/{/bold}:search  {bold}?{/bold}:help  {bold}q{/bold}:quit'
+      ' {bold}n{/bold}:feed-next  {bold}j/k{/bold}:move  {bold}J/K{/bold}:page  {bold}Spc/b{/bold}:read  {bold}v{/bold}:browser  {bold}e{/bold}:full-article  {bold}E{/bold}:ai-summarize/translate{bold}p{/bold}:pin  {bold}P{/bold}:open-all-pins  {bold}a{/bold}:category  {bold}C{/bold}:cat-mgr  {bold}l{/bold}:layout  {bold}/{/bold}:search  {bold}?{/bold}:help  {bold}q{/bold}:quit'
     );
     screen.render();
   }
@@ -151,6 +157,8 @@ export async function cmdUi(): Promise<void> {
     entryList.markSelectedAsRead();
     feedList.refresh();
     fetchedContentMode = false;
+    aiProcessedMode = false;
+    aiBaseText = null;
 
     const feedRecord = entry.feed_id ? q.getFeedById(entry.feed_id) : undefined;
     const entryWithFeed = { ...entry, feed_title: feedRecord?.title ?? '' };
@@ -162,6 +170,8 @@ export async function cmdUi(): Promise<void> {
     const entry = entryList.getSelected();
     if (!entry) return;
     fetchedContentMode = false;
+    aiProcessedMode = false;
+    aiBaseText = null;
     const feedRecord = entry.feed_id ? q.getFeedById(entry.feed_id) : undefined;
     entryView.show({ ...entry, feed_title: feedRecord?.title ?? '' });
   }
@@ -728,6 +738,8 @@ export async function cmdUi(): Promise<void> {
     fetchArticleContent(entry.url)
       .then((text) => {
         fetchedContentMode = true;
+        aiProcessedMode = false;
+        aiBaseText = text;
         const feedRecord = entry.feed_id ? q.getFeedById(entry.feed_id) : undefined;
         entryView.showFetched({ ...entry, feed_title: feedRecord?.title ?? '' }, text);
         focus = 'content';
@@ -737,6 +749,54 @@ export async function cmdUi(): Promise<void> {
       .catch((err: unknown) => {
         const msg = err instanceof Error ? err.message : String(err);
         setStatus(`Fetch failed: ${msg}`);
+        setTimeout(() => resetStatus(), 3000);
+      });
+  });
+
+  // E (S-e): AI 要約 / 翻訳（日本語 → 要約、それ以外 → 日本語翻訳）
+  screen.key(['S-e'], () => {
+    if (searchMode || modalOpen) return;
+    const entry = entryList.getSelected();
+    if (!entry) return;
+
+    if (aiProcessedMode) {
+      // AI 処理表示中 → 元に戻す
+      aiProcessedMode = false;
+      const feedRecord = entry.feed_id ? q.getFeedById(entry.feed_id) : undefined;
+      const entryWithFeed = { ...entry, feed_title: feedRecord?.title ?? '' };
+      if (fetchedContentMode && aiBaseText !== null) {
+        entryView.showFetched(entryWithFeed, aiBaseText);
+      } else {
+        entryView.show(entryWithFeed);
+      }
+      resetStatus();
+      return;
+    }
+
+    // AI 処理に使うテキストを決定（全文フェッチ済みなら優先、なければ feed の content）
+    const sourceText = fetchedContentMode && aiBaseText !== null
+      ? aiBaseText
+      : (entry.content ?? '');
+
+    if (!sourceText.trim()) {
+      setStatus('No content available for AI processing');
+      setTimeout(() => resetStatus(), 2000);
+      return;
+    }
+
+    setStatus('AI processing… (summarize / translate)');
+    summarizeOrTranslate(sourceText)
+      .then((aiText) => {
+        aiProcessedMode = true;
+        const feedRecord = entry.feed_id ? q.getFeedById(entry.feed_id) : undefined;
+        entryView.showAiProcessed({ ...entry, feed_title: feedRecord?.title ?? '' }, aiText);
+        focus = 'content';
+        updateFocus();
+        resetStatus();
+      })
+      .catch((err: unknown) => {
+        const msg = err instanceof Error ? err.message : String(err);
+        setStatus(`AI processing failed: ${msg}`);
         setTimeout(() => resetStatus(), 3000);
       });
   });
