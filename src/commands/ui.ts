@@ -784,9 +784,20 @@ export async function cmdUi(): Promise<void> {
       return;
     }
 
+    // キャッシュ済みの AI 処理結果があれば即表示
+    if (entry.ai_processed) {
+      aiProcessedMode = true;
+      const feedRecord = entry.feed_id ? q.getFeedById(entry.feed_id) : undefined;
+      entryView.showAiProcessed({ ...entry, feed_title: feedRecord?.title ?? '' }, entry.ai_processed);
+      focus = 'content';
+      updateFocus();
+      return;
+    }
+
     setStatus('AI processing… (summarize / translate)');
     summarizeOrTranslate(sourceText)
       .then((aiText) => {
+        q.saveAiProcessed(entry.id, aiText);
         aiProcessedMode = true;
         const feedRecord = entry.feed_id ? q.getFeedById(entry.feed_id) : undefined;
         entryView.showAiProcessed({ ...entry, feed_title: feedRecord?.title ?? '' }, aiText);
