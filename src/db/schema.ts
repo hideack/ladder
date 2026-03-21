@@ -115,4 +115,9 @@ function initSchema(db: Database.Database): void {
   if (!cols.includes('next_retry_at')) {
     db.exec(`ALTER TABLE feeds ADD COLUMN next_retry_at INTEGER`);
   }
+
+  const entryCols = (db.prepare(`PRAGMA table_info(entries)`).all() as { name: string }[]).map((r) => r.name);
+  if (!entryCols.includes('ai_processed')) {
+    db.exec(`ALTER TABLE entries ADD COLUMN ai_processed TEXT`);
+  }
 }

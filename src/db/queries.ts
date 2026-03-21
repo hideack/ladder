@@ -36,6 +36,7 @@ export interface Entry {
   is_read: number;
   is_pinned: number;
   fetched_at: number;
+  ai_processed: string | null;
 }
 
 export class Queries {
@@ -127,7 +128,7 @@ export class Queries {
     return this.db.prepare('SELECT * FROM entries WHERE id = ?').get(id) as Entry | undefined;
   }
 
-  insertEntry(entry: Omit<Entry, 'id' | 'fetched_at'>): number | null {
+  insertEntry(entry: Omit<Entry, 'id' | 'fetched_at' | 'ai_processed'>): number | null {
     try {
       const stmt = this.db.prepare(`
         INSERT OR IGNORE INTO entries
@@ -159,6 +160,10 @@ export class Queries {
     this.db
       .prepare('UPDATE entries SET is_pinned = CASE WHEN is_pinned = 1 THEN 0 ELSE 1 END WHERE id = ?')
       .run(entryId);
+  }
+
+  saveAiProcessed(entryId: number, text: string): void {
+    this.db.prepare('UPDATE entries SET ai_processed = ? WHERE id = ?').run(text, entryId);
   }
 
   toggleRead(entryId: number): void {
