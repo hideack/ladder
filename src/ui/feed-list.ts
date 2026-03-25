@@ -343,6 +343,14 @@ export class FeedList {
       }
     }
 
+    // 末尾まで見つからなければ先頭に折り返して再検索（ラップアラウンド）
+    for (let i = 0; i < startIdx; i++) {
+      const item = this.items[i];
+      if (item.type === 'feed' && item.feed && item.feed.unread_count > 0) {
+        return item.feed;
+      }
+    }
+
     return null;
   }
 
