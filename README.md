@@ -72,6 +72,19 @@ ladder feed move 3 "Tech"              # フィード ID 3 をカテゴリへ移
 ladder feed move 3 --uncategorize      # カテゴリ解除
 ```
 
+### Podcast エピソードをダウンロードする
+
+```bash
+ladder podcast download --days 7       # 直近 7 日分をダウンロード
+ladder podcast download --count 10     # 最新 10 話をダウンロード
+ladder podcast download --feed 3       # フィード ID 3 のみ
+ladder podcast download --feed 3 --days 30 --dir ~/Downloads/podcasts
+```
+
+保存先のデフォルトは `~/.config/ladder/podcasts/`。既にダウンロード済みのファイルはスキップされます（冪等）。
+
+TUI から個別にダウンロードするには、エントリーを選択して `Shift+D` を押します。`enclosure_url` が未取得の場合はフィードを自動再フェッチしてからダウンロードします。
+
 ### 古い記事を削除する
 
 ```bash
@@ -91,7 +104,10 @@ ladder purge --days 30
 | `p` | ピン留めトグル |
 | `Space` | 未読記事を順に読む（スクロール → 次エントリー → 次フィード） |
 | `b` | 逆方向ページ送り |
-| `o` | 選択中の記事をブラウザで開く |
+| `v` | 選択中の記事をブラウザで開く |
+| `e` | 記事全文をサイトからフェッチして表示（再押しで元に戻す） |
+| `E` | AI 要約 / 日本語翻訳（再押しで元に戻す） |
+| `Shift+D` | Podcast MP3 をダウンロード（`enclosure_url` 未取得時は自動フェッチ） |
 | `/` | タイトル・本文を全文検索 |
 | `r` | 選択フィードをリロード |
 | `R` | 全フィードをリロード |

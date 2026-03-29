@@ -29,6 +29,7 @@ src/
     ui.ts              TUI 起動・全キーバインド管理
     add.ts             ladder add <url>
     fetch.ts           ladder fetch
+    podcast.ts         ladder podcast download — Podcast MP3 ダウンロード
     import-urls.ts     ladder import-urls <file>  (1行1URL形式)
     category.ts        ladder category add/list/rename
     feed.ts            ladder feed move
@@ -49,6 +50,17 @@ src/
 - `unread_count` はトリガーで自動管理（INSERT/UPDATE 時に更新）
 - FTS5 仮想テーブル `entries_fts` もトリガーで自動同期
 
+### entries テーブルの Podcast カラム
+
+| カラム | 型 | 説明 |
+|---|---|---|
+| `enclosure_url` | TEXT | Podcast MP3 の URL（非 Podcast エントリーは NULL） |
+| `enclosure_type` | TEXT | MIME タイプ（例: `audio/mpeg`） |
+| `enclosure_length` | INTEGER | ファイルサイズ（バイト） |
+
+- クローラーが `item.enclosure` を取得して保存
+- マイグレーション前の既存エントリーは `enclosure_url = NULL`。`ladder fetch` を再実行すると `INSERT OR IGNORE` がスキップした既存エントリーにも `enclosure_url` が補完される（`updateEntryEnclosure()` による UPDATE）
+
 ## TUI キーバインド
 
 ### 全ペイン共通（フォーカス不問）
@@ -62,6 +74,7 @@ src/
 | `b` | 逆方向ページ送り |
 | `v` | 選択中の記事をブラウザで開く |
 | `e` | 記事本文全文をサイトからフェッチして表示（再押しでフィードコンテンツに戻る） |
+| `S-d` (= `Shift+D`) | 選択中エントリーの Podcast MP3 をダウンロード（`enclosure_url` 未取得時は自動フェッチ） |
 | `Tab` | Feeds ↔ Entries フォーカス切替 |
 | `Shift+Tab` | Entries ↔ Feeds フォーカス切替 |
 | `r` | 選択フィードをリロード |
@@ -139,6 +152,40 @@ screen.key(['S-h'], ...)
 ### unread_count
 `feeds.unread_count` はトリガーで管理されるキャッシュ値。
 `getAllFeedsWithLatest()` クエリで `f.*` として取得しており、実測値と一致している。
+
+## Podcast ダウンロード
+
+### サブコマンド
+
+```bash
+ladder podcast download [options]
+
+--days <n>    直近 N 日以内のエピソードのみ
+--count <n>   最新 N 件のみ
+--feed <id>   特定フィード ID のみ
+--dir <path>  保存先ディレクトリ（デフォルト: ~/.config/ladder/podcasts/）
+```
+
+### 仕組み
+
+- RSS の `<enclosure>` タグから URL を取得し `entries.enclosure_url` に保存
+- ファイル名: `{entry.id}-{title-slug}.mp3`（ID プレフィックスで衝突ゼロ）
+- `.tmp` ファイルに書き込み後に `rename`（中断時に残骸が残らない）
+- `fs.existsSync` でスキップ判定（冪等）
+
+### TUI からの個別ダウンロード（`S-d`）
+
+`S-d` (Shift+D) キーは `screen.key()` でグローバル登録しているためフォーカス不問で動作する。
+
+```
+S-d 押下
+  ├─ enclosure_url あり → ダウンロード開始
+  └─ enclosure_url なし → フィードを自動再フェッチ
+       ├─ 取得できた → ダウンロード開始
+       └─ 取得できなかった → "No podcast enclosure found in this feed"
+```
+
+`npm link` で導入したバイナリを使う場合は `npm run build` で再ビルドが必要。
 
 ## MCP サーバー
 
