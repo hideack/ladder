@@ -138,6 +138,11 @@ export async function crawlFeed(
           ? Math.floor(new Date(item.isoDate).getTime() / 1000)
           : null;
 
+        const enclosure = item.enclosure as { url?: string; type?: string; length?: string | number } | undefined;
+        const enclosureUrl    = enclosure?.url    ?? null;
+        const enclosureType   = enclosure?.type   ?? null;
+        const enclosureLength = enclosure?.length != null ? Number(enclosure.length) : null;
+
         const insertedId = q.insertEntry({
           feed_id: feed.id,
           guid,
@@ -148,6 +153,9 @@ export async function crawlFeed(
           published_at: publishedAt,
           is_read: 0,
           is_pinned: 0,
+          enclosure_url:    enclosureUrl,
+          enclosure_type:   enclosureType,
+          enclosure_length: enclosureLength,
         });
 
         if (insertedId != null) result.newEntries++;
