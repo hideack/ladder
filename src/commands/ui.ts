@@ -102,7 +102,7 @@ export async function cmdUi(): Promise<void> {
         '  {bold}v{/bold}          ブラウザで開く',
         '  {bold}e{/bold}          全文フェッチ表示 (再押しで元に戻す)',
         '  {bold}E{/bold}          AI summarize (ja) / translate to ja, toggle back',
-        '  {bold}D{/bold}          Podcast MP3 をダウンロード (~/.config/ladder/podcasts/)',
+        '  {bold}d{/bold}          Podcast MP3 をダウンロード (Entries/Content ペイン時)',
         '',
         ' {bold}{cyan-fg}── Feeds ペイン ────────────────────────{/cyan-fg}{/bold}',
         '  {bold}↓ / ↑{/bold}      フィード・カテゴリ移動',
@@ -138,7 +138,7 @@ export async function cmdUi(): Promise<void> {
 
   function resetStatus(): void {
     statusBar.setContent(
-      ' {bold}n{/bold}:feed-next  {bold}j/k{/bold}:move  {bold}J/K{/bold}:page  {bold}Spc/b{/bold}:read  {bold}v{/bold}:browser  {bold}e{/bold}:full-article  {bold}E{/bold}:ai-summarize/translate  {bold}D{/bold}:podcast-dl  {bold}p{/bold}:pin  {bold}P{/bold}:open-all-pins  {bold}a{/bold}:category  {bold}C{/bold}:cat-mgr  {bold}l{/bold}:layout  {bold}/{/bold}:search  {bold}?{/bold}:help  {bold}q{/bold}:quit'
+      ' {bold}n{/bold}:feed-next  {bold}j/k{/bold}:move  {bold}J/K{/bold}:page  {bold}Spc/b{/bold}:read  {bold}v{/bold}:browser  {bold}e{/bold}:full-article  {bold}E{/bold}:ai-summarize/translate  {bold}d{/bold}:podcast-dl  {bold}p{/bold}:pin  {bold}P{/bold}:open-all-pins  {bold}a{/bold}:category  {bold}C{/bold}:cat-mgr  {bold}l{/bold}:layout  {bold}/{/bold}:search  {bold}?{/bold}:help  {bold}q{/bold}:quit'
     );
     screen.render();
   }
@@ -432,24 +432,66 @@ export async function cmdUi(): Promise<void> {
     setTimeout(() => resetStatus(), 1500);
   });
 
-  screen.key(['d'], () => {
-    if (searchMode || modalOpen || focus !== 'feed') return;
-    const feed = feedList.getSelectedFeed();
-    if (!feed) return;
+  screen.key(['d'], async () => {
+    if (searchMode || modalOpen) return;
 
-    setStatus(`Delete "${feed.title}"? (y/N)`);
-    screen.once('keypress', (_ch: string | undefined, key: { name: string }) => {
-      if (key.name === 'y') {
-        q.deleteFeed(feed.id);
-        feedList.refresh();
-        entryList.refresh();
-        entryView.clear();
-        setStatus(`Deleted: "${feed.title}"`);
-        setTimeout(() => resetStatus(), 2000);
-      } else {
-        resetStatus();
-      }
-    });
+    if (focus === 'feed') {
+      // Feeds ペイン: フィード削除
+      const feed = feedList.getSelectedFeed();
+      if (!feed) return;
+
+      setStatus(`Delete "${feed.title}"? (y/N)`);
+      screen.once('keypress', (_ch: string | undefined, key: { name: string }) => {
+        if (key.name === 'y') {
+          q.deleteFeed(feed.id);
+          feedList.refresh();
+          entryList.refresh();
+          entryView.clear();
+          setStatus(`Deleted: "${feed.title}"`);
+          setTimeout(() => resetStatus(), 2000);
+        } else {
+          resetStatus();
+        }
+      });
+      return;
+    }
+
+    // Entries / Content ペイン: Podcast MP3 ダウンロード
+    const entry = entryList.getSelected();
+    if (!entry) return;
+
+    if (!entry.enclosure_url) {
+      setStatus('No podcast enclosure — run "ladder fetch" to update');
+      setTimeout(() => resetStatus(), 3000);
+      return;
+    }
+
+    const downloadDir = path.join(homedir(), '.config', 'ladder', 'podcasts');
+    fs.mkdirSync(downloadDir, { recursive: true });
+
+    const feedRecord = entry.feed_id ? q.getFeedById(entry.feed_id) : undefined;
+    const entryWithFeed = { ...entry, feed_title: feedRecord?.title ?? '' };
+    const filename = buildFilename(entryWithFeed);
+    const destPath = path.join(downloadDir, filename);
+
+    if (fs.existsSync(destPath)) {
+      setStatus(`Already downloaded: ${filename}`);
+      setTimeout(() => resetStatus(), 2500);
+      return;
+    }
+
+    setStatus(`Downloading: ${entry.title}`);
+    downloadEpisode(entry.enclosure_url, destPath)
+      .then(({ sizeBytes }) => {
+        const sizeMb = (sizeBytes / 1_048_576).toFixed(1);
+        setStatus(`Downloaded: ${filename} (${sizeMb} MB)`);
+        setTimeout(() => resetStatus(), 3000);
+      })
+      .catch((err: unknown) => {
+        const msg = err instanceof Error ? err.message : String(err);
+        setStatus(`Download failed: ${msg}`);
+        setTimeout(() => resetStatus(), 3000);
+      });
   });
 
   // C (S-c): カテゴリマネージャーを開く（全ペイン共通）
@@ -943,46 +985,6 @@ export async function cmdUi(): Promise<void> {
   contentPane.key(['up'], () => {
     if (focus !== 'content') return;
     entryView.scrollUp();
-  });
-
-  // D (S-d): 選択中エントリーの Podcast MP3 をダウンロード
-  screen.key(['S-d'], async () => {
-    if (searchMode || modalOpen) return;
-    const entry = entryList.getSelected();
-    if (!entry) return;
-
-    if (!entry.enclosure_url) {
-      setStatus('No podcast enclosure — run "ladder fetch" to update');
-      setTimeout(() => resetStatus(), 3000);
-      return;
-    }
-
-    const downloadDir = path.join(homedir(), '.config', 'ladder', 'podcasts');
-    fs.mkdirSync(downloadDir, { recursive: true });
-
-    const feedRecord = entry.feed_id ? q.getFeedById(entry.feed_id) : undefined;
-    const entryWithFeed = { ...entry, feed_title: feedRecord?.title ?? '' };
-    const filename = buildFilename(entryWithFeed);
-    const destPath = path.join(downloadDir, filename);
-
-    if (fs.existsSync(destPath)) {
-      setStatus(`Already downloaded: ${filename}`);
-      setTimeout(() => resetStatus(), 2500);
-      return;
-    }
-
-    setStatus(`Downloading: ${entry.title}`);
-    downloadEpisode(entry.enclosure_url, destPath)
-      .then(({ sizeBytes }) => {
-        const sizeMb = (sizeBytes / 1_048_576).toFixed(1);
-        setStatus(`Downloaded: ${filename} (${sizeMb} MB)`);
-        setTimeout(() => resetStatus(), 3000);
-      })
-      .catch((err: unknown) => {
-        const msg = err instanceof Error ? err.message : String(err);
-        setStatus(`Download failed: ${msg}`);
-        setTimeout(() => resetStatus(), 3000);
-      });
   });
 
   // Initial focus
