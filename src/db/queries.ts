@@ -37,6 +37,9 @@ export interface Entry {
   is_pinned: number;
   fetched_at: number;
   ai_processed: string | null;
+  enclosure_url:    string | null;
+  enclosure_type:   string | null;
+  enclosure_length: number | null;
 }
 
 export class Queries {
@@ -128,13 +131,19 @@ export class Queries {
     return this.db.prepare('SELECT * FROM entries WHERE id = ?').get(id) as Entry | undefined;
   }
 
-  insertEntry(entry: Omit<Entry, 'id' | 'fetched_at' | 'ai_processed'>): number | null {
+  insertEntry(entry: Omit<Entry, 'id' | 'fetched_at' | 'ai_processed' | 'enclosure_url' | 'enclosure_type' | 'enclosure_length'> & {
+    enclosure_url?: string | null;
+    enclosure_type?: string | null;
+    enclosure_length?: number | null;
+  }): number | null {
     try {
       const stmt = this.db.prepare(`
         INSERT OR IGNORE INTO entries
-          (feed_id, guid, url, title, content, author, published_at, is_read, is_pinned)
+          (feed_id, guid, url, title, content, author, published_at, is_read, is_pinned,
+           enclosure_url, enclosure_type, enclosure_length)
         VALUES
-          (@feed_id, @guid, @url, @title, @content, @author, @published_at, @is_read, @is_pinned)
+          (@feed_id, @guid, @url, @title, @content, @author, @published_at, @is_read, @is_pinned,
+           @enclosure_url, @enclosure_type, @enclosure_length)
       `);
       const result = stmt.run(entry);
       if (result.changes === 0) return null;
@@ -290,6 +299,54 @@ export class Queries {
       .prepare(`SELECT COUNT(*) as cnt FROM entries ${where}`)
       .get(...params) as { cnt: number };
     return row.cnt;
+  }
+
+  updateEntryEnclosure(
+    guid: string,
+    feedId: number,
+    enclosureUrl: string,
+    enclosureType: string | null,
+    enclosureLength: number | null
+  ): void {
+    this.db
+      .prepare(
+        `UPDATE entries SET enclosure_url = ?, enclosure_type = ?, enclosure_length = ?
+         WHERE guid = ? AND feed_id = ? AND enclosure_url IS NULL`
+      )
+      .run(enclosureUrl, enclosureType, enclosureLength, guid, feedId);
+  }
+
+  getPodcastEntries(opts: {
+    feedId?: number;
+    sinceUnix?: number;
+    limit?: number;
+  }): Array<Entry & { feed_title: string }> {
+    const conditions: string[] = ['e.enclosure_url IS NOT NULL'];
+    const params: (number | string)[] = [];
+
+    if (opts.feedId != null) {
+      conditions.push('e.feed_id = ?');
+      params.push(opts.feedId);
+    }
+    if (opts.sinceUnix != null) {
+      conditions.push('e.published_at >= ?');
+      params.push(opts.sinceUnix);
+    }
+
+    const where = `WHERE ${conditions.join(' AND ')}`;
+    const limitClause = opts.limit != null ? `LIMIT ?` : '';
+    if (opts.limit != null) params.push(opts.limit);
+
+    return this.db
+      .prepare(`
+        SELECT e.*, f.title as feed_title
+        FROM entries e
+        JOIN feeds f ON f.id = e.feed_id
+        ${where}
+        ORDER BY e.published_at DESC, e.fetched_at DESC
+        ${limitClause}
+      `)
+      .all(...params) as Array<Entry & { feed_title: string }>;
   }
 
   getEntryWithFeedTitle(id: number): (Entry & { feed_title: string }) | undefined {

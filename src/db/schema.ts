@@ -120,4 +120,13 @@ function initSchema(db: Database.Database): void {
   if (!entryCols.includes('ai_processed')) {
     db.exec(`ALTER TABLE entries ADD COLUMN ai_processed TEXT`);
   }
+  if (!entryCols.includes('enclosure_url')) {
+    db.exec(`ALTER TABLE entries ADD COLUMN enclosure_url TEXT`);
+  }
+  if (!entryCols.includes('enclosure_type')) {
+    db.exec(`ALTER TABLE entries ADD COLUMN enclosure_type TEXT`);
+  }
+  if (!entryCols.includes('enclosure_length')) {
+    db.exec(`ALTER TABLE entries ADD COLUMN enclosure_length INTEGER`);
+  }
 }

@@ -11,6 +11,7 @@ import { openDb } from '../src/db/schema.js';
 import { Queries } from '../src/db/queries.js';
 import { startMcpServer } from '../src/mcp/server.js';
 import { cmdDaemonInstall, cmdDaemonUninstall, cmdDaemonStatus } from '../src/commands/daemon.js';
+import { cmdPodcastDownload, PodcastDownloadOptions } from '../src/commands/podcast.js';
 
 const program = new Command();
 
@@ -90,6 +91,20 @@ program
     const q = new Queries(db);
     const deleted = q.purgeEntries(days);
     console.log(`Purged ${deleted} entries older than ${days} days.`);
+  });
+
+// ── podcast ───────────────────────────────────────────────────────────────────
+const podcast = program.command('podcast').description('Podcast episode management');
+
+podcast
+  .command('download')
+  .description('Download podcast episodes from subscribed feeds')
+  .option('--days <n>',   'Only download episodes published in the last N days')
+  .option('--count <n>',  'Only download the latest N episodes')
+  .option('--feed <id>',  'Restrict to a specific feed ID')
+  .option('--dir <path>', 'Download directory (default: ~/.config/ladder/podcasts/)')
+  .action(async (opts: PodcastDownloadOptions) => {
+    await cmdPodcastDownload(opts);
   });
 
 // ── daemon ────────────────────────────────────────────────────────────────────
