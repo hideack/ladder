@@ -465,13 +465,31 @@ export async function cmdUi(): Promise<void> {
 
     const entry = entryList.getSelected();
 
-    // enclosure_url があればそのままダウンロード（フォーカス不問）
-    if (entry?.enclosure_url) {
-      await downloadEntryEpisode(entry.enclosure_url, entry.id, entry.title, entry.feed_id);
+    if (entry) {
+      // エントリーが選択されている場合は常にダウンロードを試みる（フォーカス不問）
+      if (entry.enclosure_url) {
+        await downloadEntryEpisode(entry.enclosure_url, entry.id, entry.title, entry.feed_id);
+        return;
+      }
+
+      // enclosure_url が null: フィードを再フェッチして取得を試みる
+      setStatus(`Fetching feed to get enclosure URL…`);
+      await crawlFeed(db, entry.feed_id, { onLog: () => {} });
+      feedList.refresh();
+      entryList.refresh();
+
+      const refreshed = q.getEntryById(entry.id);
+      if (!refreshed?.enclosure_url) {
+        setStatus('No podcast enclosure found in this feed');
+        setTimeout(() => resetStatus(), 3000);
+        return;
+      }
+
+      await downloadEntryEpisode(refreshed.enclosure_url, refreshed.id, refreshed.title, refreshed.feed_id);
       return;
     }
 
-    // Feeds ペイン: フィード削除
+    // エントリー未選択: Feeds ペインならフィード削除、それ以外はメッセージ
     if (focus === 'feed') {
       const feed = feedList.getSelectedFeed();
       if (!feed) return;
@@ -492,26 +510,8 @@ export async function cmdUi(): Promise<void> {
       return;
     }
 
-    // enclosure_url が null: フィードを再フェッチして取得を試みる
-    if (!entry) {
-      setStatus('No entry selected');
-      setTimeout(() => resetStatus(), 2000);
-      return;
-    }
-
-    setStatus(`Fetching feed to get enclosure URL…`);
-    await crawlFeed(db, entry.feed_id, { onLog: () => {} });
-    feedList.refresh();
-    entryList.refresh();
-
-    const refreshed = q.getEntryById(entry.id);
-    if (!refreshed?.enclosure_url) {
-      setStatus('No podcast enclosure found in this feed');
-      setTimeout(() => resetStatus(), 3000);
-      return;
-    }
-
-    await downloadEntryEpisode(refreshed.enclosure_url, refreshed.id, refreshed.title, refreshed.feed_id);
+    setStatus('No entry selected');
+    setTimeout(() => resetStatus(), 2000);
   });
 
   // C (S-c): カテゴリマネージャーを開く（全ペイン共通）
