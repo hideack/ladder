@@ -463,55 +463,66 @@ export async function cmdUi(): Promise<void> {
   screen.key(['d'], async () => {
     if (searchMode || modalOpen) return;
 
-    const entry = entryList.getSelected();
+    try {
+      const entry = entryList.getSelected();
 
-    if (entry) {
-      // エントリーが選択されている場合は常にダウンロードを試みる（フォーカス不問）
-      if (entry.enclosure_url) {
-        await downloadEntryEpisode(entry.enclosure_url, entry.id, entry.title, entry.feed_id);
-        return;
-      }
-
-      // enclosure_url が null: フィードを再フェッチして取得を試みる
-      setStatus(`Fetching feed to get enclosure URL…`);
-      await crawlFeed(db, entry.feed_id, { onLog: () => {} });
-      feedList.refresh();
-      entryList.refresh();
-
-      const refreshed = q.getEntryById(entry.id);
-      if (!refreshed?.enclosure_url) {
-        setStatus('No podcast enclosure found in this feed');
-        setTimeout(() => resetStatus(), 3000);
-        return;
-      }
-
-      await downloadEntryEpisode(refreshed.enclosure_url, refreshed.id, refreshed.title, refreshed.feed_id);
-      return;
-    }
-
-    // エントリー未選択: Feeds ペインならフィード削除、それ以外はメッセージ
-    if (focus === 'feed') {
-      const feed = feedList.getSelectedFeed();
-      if (!feed) return;
-
-      setStatus(`Delete "${feed.title}"? (y/N)`);
-      screen.once('keypress', (_ch: string | undefined, key: { name: string }) => {
-        if (key.name === 'y') {
-          q.deleteFeed(feed.id);
-          feedList.refresh();
-          entryList.refresh();
-          entryView.clear();
-          setStatus(`Deleted: "${feed.title}"`);
-          setTimeout(() => resetStatus(), 2000);
-        } else {
-          resetStatus();
+      if (entry) {
+        // エントリーが選択されている場合は常にダウンロードを試みる（フォーカス不問）
+        if (entry.enclosure_url) {
+          await downloadEntryEpisode(entry.enclosure_url, entry.id, entry.title, entry.feed_id);
+          return;
         }
-      });
-      return;
-    }
 
-    setStatus('No entry selected');
-    setTimeout(() => resetStatus(), 2000);
+        // enclosure_url が null: フィードを再フェッチして取得を試みる
+        setStatus(`Fetching feed to get enclosure URL…`);
+        screen.render();
+        await crawlFeed(db, entry.feed_id, { onLog: () => {} });
+        feedList.refresh();
+        entryList.refresh();
+
+        const refreshed = q.getEntryById(entry.id);
+        if (!refreshed?.enclosure_url) {
+          setStatus('No podcast enclosure found in this feed');
+          setTimeout(() => resetStatus(), 3000);
+          return;
+        }
+
+        await downloadEntryEpisode(refreshed.enclosure_url, refreshed.id, refreshed.title, refreshed.feed_id);
+        return;
+      }
+
+      // エントリー未選択: Feeds ペインならフィード削除、それ以外はメッセージ
+      if (focus === 'feed') {
+        const feed = feedList.getSelectedFeed();
+        if (!feed) {
+          setStatus('No feed selected');
+          setTimeout(() => resetStatus(), 2000);
+          return;
+        }
+
+        setStatus(`Delete "${feed.title}"? (y/N)`);
+        screen.once('keypress', (_ch: string | undefined, key: { name: string }) => {
+          if (key.name === 'y') {
+            q.deleteFeed(feed.id);
+            feedList.refresh();
+            entryList.refresh();
+            entryView.clear();
+            setStatus(`Deleted: "${feed.title}"`);
+            setTimeout(() => resetStatus(), 2000);
+          } else {
+            resetStatus();
+          }
+        });
+        return;
+      }
+
+      setStatus('No entry selected');
+      setTimeout(() => resetStatus(), 2000);
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err);
+      setStatus(`[d] error: ${msg}`);
+      setTimeout(() => resetStatus(), 5000);
+    }
   });
 
   // C (S-c): カテゴリマネージャーを開く（全ペイン共通）
