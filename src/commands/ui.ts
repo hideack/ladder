@@ -435,8 +435,40 @@ export async function cmdUi(): Promise<void> {
   screen.key(['d'], async () => {
     if (searchMode || modalOpen) return;
 
+    // Podcast ダウンロード優先: enclosure_url があるエントリーが選択中ならフォーカスに関わらずダウンロード
+    const entry = entryList.getSelected();
+    if (entry?.enclosure_url) {
+      const downloadDir = path.join(homedir(), '.config', 'ladder', 'podcasts');
+      fs.mkdirSync(downloadDir, { recursive: true });
+
+      const feedRecord = entry.feed_id ? q.getFeedById(entry.feed_id) : undefined;
+      const entryWithFeed = { ...entry, feed_title: feedRecord?.title ?? '' };
+      const filename = buildFilename(entryWithFeed);
+      const destPath = path.join(downloadDir, filename);
+
+      if (fs.existsSync(destPath)) {
+        setStatus(`Already downloaded: ${filename}`);
+        setTimeout(() => resetStatus(), 2500);
+        return;
+      }
+
+      setStatus(`Downloading: ${entry.title}`);
+      downloadEpisode(entry.enclosure_url, destPath)
+        .then(({ sizeBytes }) => {
+          const sizeMb = (sizeBytes / 1_048_576).toFixed(1);
+          setStatus(`Downloaded: ${filename} (${sizeMb} MB)`);
+          setTimeout(() => resetStatus(), 3000);
+        })
+        .catch((err: unknown) => {
+          const msg = err instanceof Error ? err.message : String(err);
+          setStatus(`Download failed: ${msg}`);
+          setTimeout(() => resetStatus(), 3000);
+        });
+      return;
+    }
+
+    // Feeds ペイン: フィード削除
     if (focus === 'feed') {
-      // Feeds ペイン: フィード削除
       const feed = feedList.getSelectedFeed();
       if (!feed) return;
 
@@ -456,42 +488,13 @@ export async function cmdUi(): Promise<void> {
       return;
     }
 
-    // Entries / Content ペイン: Podcast MP3 ダウンロード
-    const entry = entryList.getSelected();
-    if (!entry) return;
-
-    if (!entry.enclosure_url) {
+    // Entries / Content ペイン: enclosure なし
+    if (entry) {
       setStatus('No podcast enclosure — run "ladder fetch" to update');
-      setTimeout(() => resetStatus(), 3000);
-      return;
+    } else {
+      setStatus('No entry selected');
     }
-
-    const downloadDir = path.join(homedir(), '.config', 'ladder', 'podcasts');
-    fs.mkdirSync(downloadDir, { recursive: true });
-
-    const feedRecord = entry.feed_id ? q.getFeedById(entry.feed_id) : undefined;
-    const entryWithFeed = { ...entry, feed_title: feedRecord?.title ?? '' };
-    const filename = buildFilename(entryWithFeed);
-    const destPath = path.join(downloadDir, filename);
-
-    if (fs.existsSync(destPath)) {
-      setStatus(`Already downloaded: ${filename}`);
-      setTimeout(() => resetStatus(), 2500);
-      return;
-    }
-
-    setStatus(`Downloading: ${entry.title}`);
-    downloadEpisode(entry.enclosure_url, destPath)
-      .then(({ sizeBytes }) => {
-        const sizeMb = (sizeBytes / 1_048_576).toFixed(1);
-        setStatus(`Downloaded: ${filename} (${sizeMb} MB)`);
-        setTimeout(() => resetStatus(), 3000);
-      })
-      .catch((err: unknown) => {
-        const msg = err instanceof Error ? err.message : String(err);
-        setStatus(`Download failed: ${msg}`);
-        setTimeout(() => resetStatus(), 3000);
-      });
+    setTimeout(() => resetStatus(), 4000);
   });
 
   // C (S-c): カテゴリマネージャーを開く（全ペイン共通）
