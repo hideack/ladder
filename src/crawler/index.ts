@@ -158,7 +158,12 @@ export async function crawlFeed(
           enclosure_length: enclosureLength,
         });
 
-        if (insertedId != null) result.newEntries++;
+        if (insertedId != null) {
+          result.newEntries++;
+        } else if (enclosureUrl !== null) {
+          // 既存エントリーで enclosure_url が未設定の場合のみ補完
+          q.updateEntryEnclosure(guid, feed.id, enclosureUrl, enclosureType, enclosureLength);
+        }
       }
 
       result.fetched++;

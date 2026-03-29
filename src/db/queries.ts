@@ -301,6 +301,21 @@ export class Queries {
     return row.cnt;
   }
 
+  updateEntryEnclosure(
+    guid: string,
+    feedId: number,
+    enclosureUrl: string,
+    enclosureType: string | null,
+    enclosureLength: number | null
+  ): void {
+    this.db
+      .prepare(
+        `UPDATE entries SET enclosure_url = ?, enclosure_type = ?, enclosure_length = ?
+         WHERE guid = ? AND feed_id = ? AND enclosure_url IS NULL`
+      )
+      .run(enclosureUrl, enclosureType, enclosureLength, guid, feedId);
+  }
+
   getPodcastEntries(opts: {
     feedId?: number;
     sinceUnix?: number;

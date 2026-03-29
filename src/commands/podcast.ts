@@ -23,7 +23,7 @@ export interface PodcastDownloadOptions {
   dir?:   string;
 }
 
-function buildFilename(entry: Entry & { feed_title: string }): string {
+export function buildFilename(entry: Entry & { feed_title: string }): string {
   let ext = '.mp3';
   try {
     ext = path.extname(new URL(entry.enclosure_url!).pathname) || '.mp3';
@@ -37,7 +37,7 @@ function buildFilename(entry: Entry & { feed_title: string }): string {
   return `${entry.id}-${slug}${ext}`;
 }
 
-async function downloadEpisode(
+export async function downloadEpisode(
   enclosureUrl: string,
   destPath: string
 ): Promise<{ sizeBytes: number }> {
