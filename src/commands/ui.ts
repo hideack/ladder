@@ -102,7 +102,7 @@ export async function cmdUi(): Promise<void> {
         '  {bold}v{/bold}          ブラウザで開く',
         '  {bold}e{/bold}          全文フェッチ表示 (再押しで元に戻す)',
         '  {bold}E{/bold}          AI summarize (ja) / translate to ja, toggle back',
-        '  {bold}d{/bold}          Podcast MP3 をダウンロード (Entries/Content ペイン時)',
+        '  {bold}S-d{/bold}        Podcast MP3 をダウンロード (~/.config/ladder/podcasts/)',
         '',
         ' {bold}{cyan-fg}── Feeds ペイン ────────────────────────{/cyan-fg}{/bold}',
         '  {bold}↓ / ↑{/bold}      フィード・カテゴリ移動',
@@ -138,7 +138,7 @@ export async function cmdUi(): Promise<void> {
 
   function resetStatus(): void {
     statusBar.setContent(
-      ' {bold}n{/bold}:feed-next  {bold}j/k{/bold}:move  {bold}J/K{/bold}:page  {bold}Spc/b{/bold}:read  {bold}v{/bold}:browser  {bold}e{/bold}:full-article  {bold}E{/bold}:ai-summarize/translate  {bold}d{/bold}:podcast-dl  {bold}p{/bold}:pin  {bold}P{/bold}:open-all-pins  {bold}a{/bold}:category  {bold}C{/bold}:cat-mgr  {bold}l{/bold}:layout  {bold}/{/bold}:search  {bold}?{/bold}:help  {bold}q{/bold}:quit'
+      ' {bold}n{/bold}:feed-next  {bold}j/k{/bold}:move  {bold}J/K{/bold}:page  {bold}Spc/b{/bold}:read  {bold}v{/bold}:browser  {bold}e{/bold}:full-article  {bold}E{/bold}:ai  {bold}S-d{/bold}:podcast-dl  {bold}p{/bold}:pin  {bold}P{/bold}:open-all-pins  {bold}a{/bold}:category  {bold}C{/bold}:cat-mgr  {bold}l{/bold}:layout  {bold}/{/bold}:search  {bold}?{/bold}:help  {bold}q{/bold}:quit'
     );
     screen.render();
   }
@@ -432,13 +432,59 @@ export async function cmdUi(): Promise<void> {
     setTimeout(() => resetStatus(), 1500);
   });
 
-  // enclosure_url を持つエントリーをダウンロードする共通処理
-  async function downloadEntryEpisode(enclosureUrl: string, entryId: number, entryTitle: string, feedId: number): Promise<void> {
+  // d: フィード削除（Feeds ペインのみ）
+  screen.key(['d'], () => {
+    if (searchMode || modalOpen || focus !== 'feed') return;
+    const feed = feedList.getSelectedFeed();
+    if (!feed) return;
+
+    setStatus(`Delete "${feed.title}"? (y/N)`);
+    screen.once('keypress', (_ch: string | undefined, key: { name: string }) => {
+      if (key.name === 'y') {
+        q.deleteFeed(feed.id);
+        feedList.refresh();
+        entryList.refresh();
+        entryView.clear();
+        setStatus(`Deleted: "${feed.title}"`);
+        setTimeout(() => resetStatus(), 2000);
+      } else {
+        resetStatus();
+      }
+    });
+  });
+
+  // S-d (Shift+D): Podcast エピソードをダウンロード（全ペイン共通）
+  screen.key(['S-d'], async () => {
+    if (searchMode || modalOpen) return;
+
+    const entry = entryList.getSelected();
+    if (!entry) {
+      setStatus('No entry selected');
+      setTimeout(() => resetStatus(), 2000);
+      return;
+    }
+
+    const enclosureUrl = entry.enclosure_url ?? await (async () => {
+      // enclosure_url が未取得: フィードを再フェッチして補完
+      setStatus('Fetching feed to get enclosure URL…');
+      screen.render();
+      await crawlFeed(db, entry.feed_id, { onLog: () => {} });
+      feedList.refresh();
+      entryList.refresh();
+      return q.getEntryById(entry.id)?.enclosure_url ?? null;
+    })();
+
+    if (!enclosureUrl) {
+      setStatus('No podcast enclosure found in this feed');
+      setTimeout(() => resetStatus(), 3000);
+      return;
+    }
+
     const downloadDir = path.join(homedir(), '.config', 'ladder', 'podcasts');
     fs.mkdirSync(downloadDir, { recursive: true });
 
-    const feedRecord = q.getFeedById(feedId);
-    const filename = buildFilename({ id: entryId, title: entryTitle, enclosure_url: enclosureUrl, feed_title: feedRecord?.title ?? '' } as Parameters<typeof buildFilename>[0]);
+    const feedRecord = q.getFeedById(entry.feed_id);
+    const filename = buildFilename({ ...entry, enclosure_url: enclosureUrl, feed_title: feedRecord?.title ?? '' });
     const destPath = path.join(downloadDir, filename);
 
     if (fs.existsSync(destPath)) {
@@ -447,7 +493,8 @@ export async function cmdUi(): Promise<void> {
       return;
     }
 
-    setStatus(`Downloading: ${entryTitle}`);
+    setStatus(`Downloading: ${entry.title}`);
+    screen.render();
     try {
       const { sizeBytes } = await downloadEpisode(enclosureUrl, destPath);
       const sizeMb = (sizeBytes / 1_048_576).toFixed(1);
@@ -457,71 +504,6 @@ export async function cmdUi(): Promise<void> {
       const msg = err instanceof Error ? err.message : String(err);
       setStatus(`Download failed: ${msg}`);
       setTimeout(() => resetStatus(), 3000);
-    }
-  }
-
-  screen.key(['d'], async () => {
-    if (searchMode || modalOpen) return;
-
-    try {
-      const entry = entryList.getSelected();
-
-      if (entry) {
-        // エントリーが選択されている場合は常にダウンロードを試みる（フォーカス不問）
-        if (entry.enclosure_url) {
-          await downloadEntryEpisode(entry.enclosure_url, entry.id, entry.title, entry.feed_id);
-          return;
-        }
-
-        // enclosure_url が null: フィードを再フェッチして取得を試みる
-        setStatus(`Fetching feed to get enclosure URL…`);
-        screen.render();
-        await crawlFeed(db, entry.feed_id, { onLog: () => {} });
-        feedList.refresh();
-        entryList.refresh();
-
-        const refreshed = q.getEntryById(entry.id);
-        if (!refreshed?.enclosure_url) {
-          setStatus('No podcast enclosure found in this feed');
-          setTimeout(() => resetStatus(), 3000);
-          return;
-        }
-
-        await downloadEntryEpisode(refreshed.enclosure_url, refreshed.id, refreshed.title, refreshed.feed_id);
-        return;
-      }
-
-      // エントリー未選択: Feeds ペインならフィード削除、それ以外はメッセージ
-      if (focus === 'feed') {
-        const feed = feedList.getSelectedFeed();
-        if (!feed) {
-          setStatus('No feed selected');
-          setTimeout(() => resetStatus(), 2000);
-          return;
-        }
-
-        setStatus(`Delete "${feed.title}"? (y/N)`);
-        screen.once('keypress', (_ch: string | undefined, key: { name: string }) => {
-          if (key.name === 'y') {
-            q.deleteFeed(feed.id);
-            feedList.refresh();
-            entryList.refresh();
-            entryView.clear();
-            setStatus(`Deleted: "${feed.title}"`);
-            setTimeout(() => resetStatus(), 2000);
-          } else {
-            resetStatus();
-          }
-        });
-        return;
-      }
-
-      setStatus('No entry selected');
-      setTimeout(() => resetStatus(), 2000);
-    } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : String(err);
-      setStatus(`[d] error: ${msg}`);
-      setTimeout(() => resetStatus(), 5000);
     }
   });
 
