@@ -432,38 +432,42 @@ export async function cmdUi(): Promise<void> {
     setTimeout(() => resetStatus(), 1500);
   });
 
+  // enclosure_url を持つエントリーをダウンロードする共通処理
+  async function downloadEntryEpisode(enclosureUrl: string, entryId: number, entryTitle: string, feedId: number): Promise<void> {
+    const downloadDir = path.join(homedir(), '.config', 'ladder', 'podcasts');
+    fs.mkdirSync(downloadDir, { recursive: true });
+
+    const feedRecord = q.getFeedById(feedId);
+    const filename = buildFilename({ id: entryId, title: entryTitle, enclosure_url: enclosureUrl, feed_title: feedRecord?.title ?? '' } as Parameters<typeof buildFilename>[0]);
+    const destPath = path.join(downloadDir, filename);
+
+    if (fs.existsSync(destPath)) {
+      setStatus(`Already downloaded: ${filename}`);
+      setTimeout(() => resetStatus(), 2500);
+      return;
+    }
+
+    setStatus(`Downloading: ${entryTitle}`);
+    try {
+      const { sizeBytes } = await downloadEpisode(enclosureUrl, destPath);
+      const sizeMb = (sizeBytes / 1_048_576).toFixed(1);
+      setStatus(`Downloaded: ${filename} (${sizeMb} MB)`);
+      setTimeout(() => resetStatus(), 3000);
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err);
+      setStatus(`Download failed: ${msg}`);
+      setTimeout(() => resetStatus(), 3000);
+    }
+  }
+
   screen.key(['d'], async () => {
     if (searchMode || modalOpen) return;
 
-    // Podcast ダウンロード優先: enclosure_url があるエントリーが選択中ならフォーカスに関わらずダウンロード
     const entry = entryList.getSelected();
+
+    // enclosure_url があればそのままダウンロード（フォーカス不問）
     if (entry?.enclosure_url) {
-      const downloadDir = path.join(homedir(), '.config', 'ladder', 'podcasts');
-      fs.mkdirSync(downloadDir, { recursive: true });
-
-      const feedRecord = entry.feed_id ? q.getFeedById(entry.feed_id) : undefined;
-      const entryWithFeed = { ...entry, feed_title: feedRecord?.title ?? '' };
-      const filename = buildFilename(entryWithFeed);
-      const destPath = path.join(downloadDir, filename);
-
-      if (fs.existsSync(destPath)) {
-        setStatus(`Already downloaded: ${filename}`);
-        setTimeout(() => resetStatus(), 2500);
-        return;
-      }
-
-      setStatus(`Downloading: ${entry.title}`);
-      downloadEpisode(entry.enclosure_url, destPath)
-        .then(({ sizeBytes }) => {
-          const sizeMb = (sizeBytes / 1_048_576).toFixed(1);
-          setStatus(`Downloaded: ${filename} (${sizeMb} MB)`);
-          setTimeout(() => resetStatus(), 3000);
-        })
-        .catch((err: unknown) => {
-          const msg = err instanceof Error ? err.message : String(err);
-          setStatus(`Download failed: ${msg}`);
-          setTimeout(() => resetStatus(), 3000);
-        });
+      await downloadEntryEpisode(entry.enclosure_url, entry.id, entry.title, entry.feed_id);
       return;
     }
 
@@ -488,13 +492,26 @@ export async function cmdUi(): Promise<void> {
       return;
     }
 
-    // Entries / Content ペイン: enclosure なし
-    if (entry) {
-      setStatus('No podcast enclosure — run "ladder fetch" to update');
-    } else {
+    // enclosure_url が null: フィードを再フェッチして取得を試みる
+    if (!entry) {
       setStatus('No entry selected');
+      setTimeout(() => resetStatus(), 2000);
+      return;
     }
-    setTimeout(() => resetStatus(), 4000);
+
+    setStatus(`Fetching feed to get enclosure URL…`);
+    await crawlFeed(db, entry.feed_id, { onLog: () => {} });
+    feedList.refresh();
+    entryList.refresh();
+
+    const refreshed = q.getEntryById(entry.id);
+    if (!refreshed?.enclosure_url) {
+      setStatus('No podcast enclosure found in this feed');
+      setTimeout(() => resetStatus(), 3000);
+      return;
+    }
+
+    await downloadEntryEpisode(refreshed.enclosure_url, refreshed.id, refreshed.title, refreshed.feed_id);
   });
 
   // C (S-c): カテゴリマネージャーを開く（全ペイン共通）
