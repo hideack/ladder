@@ -16,8 +16,11 @@ import { EntryList } from '../ui/entry-list.js';
 import { EntryView } from '../ui/entry-view.js';
 import { showCategoryPicker } from '../ui/category-picker.js';
 import { showCategoryManager } from '../ui/category-manager.js';
+import { logKey, pruneKeylog } from '../logger/keylog.js';
 
 export async function cmdUi(): Promise<void> {
+  pruneKeylog();
+
   const db = openDb();
   const q = new Queries(db);
 
@@ -186,6 +189,12 @@ export async function cmdUi(): Promise<void> {
     entryList.loadFeed(feedId);
     previewSelectedEntry();
   }
+
+  // 全キーをログ記録（フォーカス・モードに関わらず）
+  screen.on('keypress', (_ch: string | undefined, key: { full?: string; name?: string }) => {
+    const keyName = key.full ?? key.name ?? _ch ?? 'unknown';
+    logKey(keyName, focus);
+  });
 
   // Escape: 検索確定後の絞り込み状態を解除して通常ビューに戻す
   screen.key(['escape'], () => {
