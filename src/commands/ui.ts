@@ -10,10 +10,11 @@ import { fetchArticleContent } from '../crawler/content-fetcher.js';
 import { summarizeOrTranslate } from '../crawler/ai-processor.js';
 import { buildFilename, downloadEpisode } from './podcast.js';
 import { createLayout, applyLayout, LayoutMode } from '../ui/layout.js';
-import { loadUiState, saveUiState } from '../ui/ui-state.js';
+import { loadUiState, saveUiState, UiMode } from '../ui/ui-state.js';
 import { FeedList, FilterMode } from '../ui/feed-list.js';
 import { EntryList } from '../ui/entry-list.js';
 import { EntryView } from '../ui/entry-view.js';
+import { UnifiedEntryList } from '../ui/unified-entry-list.js';
 import { showCategoryPicker } from '../ui/category-picker.js';
 import { showCategoryManager } from '../ui/category-manager.js';
 import { logKey, pruneKeylog } from '../logger/keylog.js';
@@ -27,11 +28,13 @@ export async function cmdUi(): Promise<void> {
   const uiState = loadUiState();
 
   const layout = createLayout();
-  const { screen, feedPane, entryPane, contentPane, statusBar } = layout;
+  const { screen, feedPane, entryPane, contentPane, statusBar, unifiedListPane, unifiedContentPane } = layout;
 
   const feedList = new FeedList(feedPane, q, uiState.filterMode);
   const entryList = new EntryList(entryPane, q);
   const entryView = new EntryView(contentPane);
+  const unifiedList = new UnifiedEntryList(unifiedListPane, q);
+  const unifiedView = new EntryView(unifiedContentPane);
 
   // Current focus: 'feed' | 'entry' | 'content'
   let focus: 'feed' | 'entry' | 'content' = 'feed';
@@ -39,6 +42,7 @@ export async function cmdUi(): Promise<void> {
   let helpVisible = false;
   let modalOpen = false;
   let layoutMode: LayoutMode = uiState.layoutMode;
+  let uiMode: UiMode = uiState.uiMode ?? '3pane';
   // e キー: フィードコンテンツ表示 ↔ 全文フェッチ表示のトグル状態
   let fetchedContentMode = false;
   // E キー: AI 要約/翻訳表示のトグル状態
@@ -61,6 +65,7 @@ export async function cmdUi(): Promise<void> {
   if (layoutMode !== 'horizontal') {
     applyLayout(layout, layoutMode);
   }
+  // 前回のUIモードを復元（unified の場合は後で switchToUnified() を呼ぶ）
 
   function showHelp(): void {
     if (helpVisible) return;
@@ -71,7 +76,7 @@ export async function cmdUi(): Promise<void> {
       top: 'center',
       left: 'center',
       width: 58,
-      height: 33,
+      height: 36,
       border: { type: 'line' },
       label: ' Help — any key to close ',
       tags: true,
@@ -93,6 +98,7 @@ export async function cmdUi(): Promise<void> {
         '  {bold}Escape{/bold}     検索モード解除',
         '  {bold}?{/bold}          このヘルプを表示/閉じる',
         '  {bold}l{/bold}          レイアウト切替 (水平3ペイン ↔ 垂直分割)',
+        '  {bold}!{/bold}          統合ビュー切替 (全未読一覧 ↔ 3ペイン)',
         '',
         ' {bold}{cyan-fg}── 全ペイン共通 ────────────────────────{/cyan-fg}{/bold}',
         '  {bold}n{/bold}          フィードカーソル 次へ（Contentペイン中は次の未読へ）',
@@ -112,6 +118,7 @@ export async function cmdUi(): Promise<void> {
         '  {bold}Enter{/bold}      フィード選択 / カテゴリ折りたたみ',
         '  {bold}s{/bold}          ソート切替 (未読数 ↔ 最新記事)',
         '  {bold}H{/bold}          フィルター切替 (active→unread→all)',
+        '                {gray-fg}※ 統合ビューでも同じフィルターが適用される{/gray-fg}',
         '  {bold}d{/bold}          フィード購読解除',
         '  {bold}a{/bold}          カテゴリ割り当て',
         '  {bold}C{/bold}          カテゴリマネージャー',
@@ -148,12 +155,23 @@ export async function cmdUi(): Promise<void> {
 
   // フォーカス中ペインは白枠、非フォーカスはグレー枠
   function updateFocus(): void {
-    const paneMap = { feed: feedPane, entry: entryPane, content: contentPane };
-    for (const [name, pane] of Object.entries(paneMap) as [string, blessed.Widgets.BoxElement][]) {
-      const active = name === focus;
-      (pane.style as Record<string, unknown>).border = { fg: active ? 'white' : 'gray' };
-      (pane.style as Record<string, unknown>).label  = { fg: active ? 'white' : 'gray', bold: active };
-      if (active) pane.focus();
+    if (uiMode === 'unified') {
+      const isLeft = focus === 'entry';
+      const isRight = focus === 'content';
+      (unifiedListPane.style as Record<string, unknown>).border = { fg: isLeft ? 'white' : 'gray' };
+      (unifiedListPane.style as Record<string, unknown>).label  = { fg: isLeft ? 'white' : 'gray', bold: isLeft };
+      (unifiedContentPane.style as Record<string, unknown>).border = { fg: isRight ? 'white' : 'gray' };
+      (unifiedContentPane.style as Record<string, unknown>).label  = { fg: isRight ? 'white' : 'gray', bold: isRight };
+      if (isLeft) unifiedListPane.focus();
+      else unifiedContentPane.focus();
+    } else {
+      const paneMap = { feed: feedPane, entry: entryPane, content: contentPane };
+      for (const [name, pane] of Object.entries(paneMap) as [string, blessed.Widgets.BoxElement][]) {
+        const active = name === focus;
+        (pane.style as Record<string, unknown>).border = { fg: active ? 'white' : 'gray' };
+        (pane.style as Record<string, unknown>).label  = { fg: active ? 'white' : 'gray', bold: active };
+        if (active) pane.focus();
+      }
     }
     screen.render();
   }
@@ -190,6 +208,53 @@ export async function cmdUi(): Promise<void> {
     previewSelectedEntry();
   }
 
+  // 統合2ペインビューに切替
+  function switchToUnified(): void {
+    feedPane.hide(); entryPane.hide(); contentPane.hide();
+    unifiedListPane.show(); unifiedContentPane.show();
+    uiMode = 'unified';
+    fetchedContentMode = false; aiProcessedMode = false; aiBaseText = null;
+    unifiedList.load(feedList.filterMode);
+    if (unifiedList.getSelected()) unifiedView.show(unifiedList.getSelected()!); else unifiedView.clear();
+    focus = 'entry';
+    updateFocus();
+    saveUiState({ layoutMode, filterMode: feedList.filterMode, uiMode });
+    setStatus('Unified View — ! to toggle');
+    setTimeout(() => resetStatus(), 1500);
+  }
+
+  // 3ペインビューに切替
+  function switchTo3Pane(): void {
+    unifiedListPane.hide(); unifiedContentPane.hide();
+    feedPane.show(); entryPane.show(); contentPane.show();
+    uiMode = '3pane';
+    applyLayout(layout, layoutMode);
+    focus = 'feed';
+    updateFocus();
+    feedList.refresh();
+    saveUiState({ layoutMode, filterMode: feedList.filterMode, uiMode });
+    setStatus('3-Pane View — ! to toggle');
+    setTimeout(() => resetStatus(), 1500);
+  }
+
+  // アクティブなUIモードで選択中のエントリーを返すヘルパー
+  function getActiveEntry(): (import('../db/queries.js').Entry & { feed_title?: string }) | null {
+    return uiMode === 'unified' ? unifiedList.getSelected() : entryList.getSelected();
+  }
+
+  // unified ビューで選択中エントリーを既読にして右ペインに表示
+  function openUnifiedEntry(): void {
+    const entry = unifiedList.getSelected();
+    if (!entry) return;
+    unifiedList.markSelectedAsRead();
+    fetchedContentMode = false;
+    aiProcessedMode = false;
+    aiBaseText = null;
+    unifiedView.show(entry);
+    focus = 'content';
+    updateFocus();
+  }
+
   // 全キーをログ記録（フォーカス・モードに関わらず）
   screen.on('keypress', (_ch: string | undefined, key: { full?: string; name?: string }) => {
     const keyName = key.full ?? key.name ?? _ch ?? 'unknown';
@@ -213,17 +278,25 @@ export async function cmdUi(): Promise<void> {
     }
   });
 
-  // Tab: cycle focus forward (feed ↔ entry only)
+  // Tab: cycle focus forward (feed ↔ entry only / unified: list ↔ content)
   screen.key(['tab'], () => {
     if (searchMode || modalOpen) return;
-    focus = focus === 'feed' ? 'entry' : 'feed';
+    if (uiMode === 'unified') {
+      focus = focus === 'entry' ? 'content' : 'entry';
+    } else {
+      focus = focus === 'feed' ? 'entry' : 'feed';
+    }
     updateFocus();
   });
 
-  // Shift+Tab: cycle focus backward (feed ↔ entry only)
+  // Shift+Tab: cycle focus backward (unified: content ↔ list)
   screen.key(['S-tab'], () => {
     if (searchMode || modalOpen) return;
-    focus = focus === 'entry' ? 'feed' : 'entry';
+    if (uiMode === 'unified') {
+      focus = focus === 'content' ? 'entry' : 'content';
+    } else {
+      focus = focus === 'entry' ? 'feed' : 'entry';
+    }
     updateFocus();
   });
 
@@ -235,14 +308,20 @@ export async function cmdUi(): Promise<void> {
 
   // l: レイアウト切替 (水平3ペイン ↔ 左フィード+右上下分割)
   screen.key(['l'], () => {
-    if (searchMode || modalOpen) return;
+    if (searchMode || modalOpen || uiMode !== '3pane') return;
     layoutMode = layoutMode === 'horizontal' ? 'vertical' : 'horizontal';
     applyLayout(layout, layoutMode);
-    saveUiState({ layoutMode, filterMode: feedList.filterMode });
+    saveUiState({ layoutMode, filterMode: feedList.filterMode, uiMode });
     const label = layoutMode === 'horizontal' ? '水平3ペイン' : '垂直分割';
     setStatus(`Layout: ${label}`);
     screen.render();
     setTimeout(() => resetStatus(), 1500);
+  });
+
+  // !: 統合2ペインビュー ↔ 3ペインビュー切替
+  screen.key(['!'], () => {
+    if (searchMode || modalOpen) return;
+    if (uiMode === '3pane') switchToUnified(); else switchTo3Pane();
   });
 
   // Quit
@@ -431,14 +510,20 @@ export async function cmdUi(): Promise<void> {
 
   // H: フィルターモードを循環 (active → unread → all → active)
   screen.key(['S-h'], () => {
-    if (searchMode || modalOpen || focus !== 'feed') return;
+    if (searchMode || modalOpen) return;
+    if (uiMode !== 'unified' && focus !== 'feed') return;
     feedList.cycleFilter();
-    saveUiState({ layoutMode, filterMode: feedList.filterMode });
+    saveUiState({ layoutMode, filterMode: feedList.filterMode, uiMode });
     const label =
       feedList.filterMode === 'active' ? '未読 & 180日以内' :
       feedList.filterMode === 'unread' ? '未読のみ' : 'すべて表示';
     setStatus(`Filter: ${label}`);
     setTimeout(() => resetStatus(), 1500);
+    // unified ビュー中はリストを新しいフィルタで再ロード
+    if (uiMode === 'unified') {
+      unifiedList.load(feedList.filterMode);
+      if (unifiedList.getSelected()) unifiedView.show(unifiedList.getSelected()!); else unifiedView.clear();
+    }
   });
 
   // d: フィード削除（Feeds ペインのみ）
@@ -466,7 +551,7 @@ export async function cmdUi(): Promise<void> {
   screen.key(['S-d'], async () => {
     if (searchMode || modalOpen) return;
 
-    const entry = entryList.getSelected();
+    const entry = getActiveEntry();
     if (!entry) {
       setStatus('No entry selected');
       setTimeout(() => resetStatus(), 2000);
@@ -580,9 +665,14 @@ export async function cmdUi(): Promise<void> {
   });
 
   // n: content ペイン中は次の未読へ進む（space 末端到達フローと同様）
+  //    unified ビューでは次の未読エントリーへ
   //    それ以外はフィードカーソルを次へ移動
   screen.key(['n'], () => {
     if (searchMode || modalOpen) return;
+    if (uiMode === 'unified') {
+      advanceUnifiedReading();
+      return;
+    }
     if (focus === 'content') {
       advanceSpaceReading();
       return;
@@ -602,8 +692,14 @@ export async function cmdUi(): Promise<void> {
   // j/k: フォーカス依存
   //   feed ペイン → フィードカーソル移動
   //   entry / content ペイン → エントリーカーソル移動
+  //   unified ビュー → 統合リスト移動
   screen.key(['j'], () => {
     if (searchMode || modalOpen) return;
+    if (uiMode === 'unified') {
+      unifiedList.moveDown();
+      openUnifiedEntry();
+      return;
+    }
     if (focus === 'feed') {
       feedList.refresh();
       feedList.moveDown();
@@ -623,6 +719,11 @@ export async function cmdUi(): Promise<void> {
 
   screen.key(['k'], () => {
     if (searchMode || modalOpen) return;
+    if (uiMode === 'unified') {
+      unifiedList.moveUp();
+      openUnifiedEntry();
+      return;
+    }
     if (focus === 'feed') {
       feedList.refresh();
       feedList.moveUp();
@@ -643,6 +744,11 @@ export async function cmdUi(): Promise<void> {
   // J/K: ページ単位移動（フォーカス依存）
   screen.key(['S-j'], () => {
     if (searchMode || modalOpen) return;
+    if (uiMode === 'unified') {
+      unifiedList.movePageDown();
+      openUnifiedEntry();
+      return;
+    }
     if (focus === 'feed') {
       feedList.movePageDown();
       const sel = feedList.getSelected();
@@ -661,6 +767,11 @@ export async function cmdUi(): Promise<void> {
 
   screen.key(['S-k'], () => {
     if (searchMode || modalOpen) return;
+    if (uiMode === 'unified') {
+      unifiedList.movePageUp();
+      openUnifiedEntry();
+      return;
+    }
     if (focus === 'feed') {
       feedList.movePageUp();
       const sel = feedList.getSelected();
@@ -680,10 +791,14 @@ export async function cmdUi(): Promise<void> {
   // p: ピン留めトグル（LDR スタイル、グローバル）
   screen.key(['p'], () => {
     if (searchMode || modalOpen) return;
-    const entry = entryList.getSelected();
+    const entry = getActiveEntry();
     if (!entry) return;
-    entryList.togglePinSelected();
-    feedList.refresh();
+    if (uiMode === 'unified') {
+      unifiedList.togglePinSelected();
+    } else {
+      entryList.togglePinSelected();
+      feedList.refresh();
+    }
     setStatus(entry.is_pinned ? 'Pinned' : 'Unpinned');
     setTimeout(() => resetStatus(), 1500);
   });
@@ -691,10 +806,14 @@ export async function cmdUi(): Promise<void> {
   // c: ピン留めトグル（後方互換）
   screen.key(['c'], () => {
     if (searchMode || modalOpen) return;
-    const entry = entryList.getSelected();
+    const entry = getActiveEntry();
     if (!entry) return;
-    entryList.togglePinSelected();
-    feedList.refresh();
+    if (uiMode === 'unified') {
+      unifiedList.togglePinSelected();
+    } else {
+      entryList.togglePinSelected();
+      feedList.refresh();
+    }
     setStatus(entry.is_pinned ? 'Pinned' : 'Unpinned');
     setTimeout(() => resetStatus(), 1500);
   });
@@ -726,6 +845,12 @@ export async function cmdUi(): Promise<void> {
     if (focus !== 'entry') return;
     entryList.toggleReadSelected();
     feedList.refresh();
+  });
+
+  // u: unified ビュー用（screen レベルで登録）
+  screen.key(['u'], () => {
+    if (searchMode || modalOpen || uiMode !== 'unified') return;
+    unifiedList.toggleReadSelected();
   });
 
   // m: フォーカスに関わらず選択中フィードの全記事を既読にし、次のフィードへ移動
@@ -773,7 +898,7 @@ export async function cmdUi(): Promise<void> {
   }
 
   function openInBrowser(): void {
-    const entry = entryList.getSelected();
+    const entry = getActiveEntry();
     if (!entry?.url) return;
 
     if (!openUrlInBrowser(entry.url)) {
@@ -791,18 +916,20 @@ export async function cmdUi(): Promise<void> {
   // e: 記事本文の全文をサイトから取得して表示（再押しでフィードコンテンツに戻る）
   screen.key(['e'], () => {
     if (searchMode || modalOpen) return;
-    const entry = entryList.getSelected();
+    const entry = getActiveEntry();
     if (!entry || !entry.url) {
       setStatus('No URL available for this entry');
       setTimeout(() => resetStatus(), 2000);
       return;
     }
 
+    const activeView = uiMode === 'unified' ? unifiedView : entryView;
+
     if (fetchedContentMode) {
       // 全文表示中 → フィードコンテンツに戻す
       fetchedContentMode = false;
       const feedRecord = entry.feed_id ? q.getFeedById(entry.feed_id) : undefined;
-      entryView.show({ ...entry, feed_title: feedRecord?.title ?? '' });
+      activeView.show({ ...entry, feed_title: feedRecord?.title ?? '' });
       resetStatus();
       return;
     }
@@ -815,7 +942,7 @@ export async function cmdUi(): Promise<void> {
         aiProcessedMode = false;
         aiBaseText = text;
         const feedRecord = entry.feed_id ? q.getFeedById(entry.feed_id) : undefined;
-        entryView.showFetched({ ...entry, feed_title: feedRecord?.title ?? '' }, text);
+        activeView.showFetched({ ...entry, feed_title: feedRecord?.title ?? '' }, text);
         focus = 'content';
         updateFocus();
         resetStatus();
@@ -830,8 +957,10 @@ export async function cmdUi(): Promise<void> {
   // E (S-e): AI 要約 / 翻訳（日本語 → 要約、それ以外 → 日本語翻訳）
   screen.key(['S-e'], () => {
     if (searchMode || modalOpen) return;
-    const entry = entryList.getSelected();
+    const entry = getActiveEntry();
     if (!entry) return;
+
+    const activeView = uiMode === 'unified' ? unifiedView : entryView;
 
     if (aiProcessedMode) {
       // AI 処理表示中 → 元に戻す
@@ -839,9 +968,9 @@ export async function cmdUi(): Promise<void> {
       const feedRecord = entry.feed_id ? q.getFeedById(entry.feed_id) : undefined;
       const entryWithFeed = { ...entry, feed_title: feedRecord?.title ?? '' };
       if (fetchedContentMode && aiBaseText !== null) {
-        entryView.showFetched(entryWithFeed, aiBaseText);
+        activeView.showFetched(entryWithFeed, aiBaseText);
       } else {
-        entryView.show(entryWithFeed);
+        activeView.show(entryWithFeed);
       }
       resetStatus();
       return;
@@ -862,7 +991,7 @@ export async function cmdUi(): Promise<void> {
     if (entry.ai_processed) {
       aiProcessedMode = true;
       const feedRecord = entry.feed_id ? q.getFeedById(entry.feed_id) : undefined;
-      entryView.showAiProcessed({ ...entry, feed_title: feedRecord?.title ?? '' }, entry.ai_processed);
+      activeView.showAiProcessed({ ...entry, feed_title: feedRecord?.title ?? '' }, entry.ai_processed);
       focus = 'content';
       updateFocus();
       return;
@@ -874,7 +1003,7 @@ export async function cmdUi(): Promise<void> {
         q.saveAiProcessed(entry.id, aiText);
         aiProcessedMode = true;
         const feedRecord = entry.feed_id ? q.getFeedById(entry.feed_id) : undefined;
-        entryView.showAiProcessed({ ...entry, feed_title: feedRecord?.title ?? '' }, aiText);
+        activeView.showAiProcessed({ ...entry, feed_title: feedRecord?.title ?? '' }, aiText);
         focus = 'content';
         updateFocus();
         resetStatus();
@@ -887,6 +1016,28 @@ export async function cmdUi(): Promise<void> {
   });
 
   // ── Space: sequential unread reading ──────────────────────────────────────
+
+  // unified コンテンツペインが末端に達しているか判定
+  function isUnifiedContentAtBottom(): boolean {
+    const box = unifiedContentPane as unknown as { getScrollPerc(): number; getScrollHeight(): number };
+    const scrollH = typeof box.getScrollHeight === 'function' ? box.getScrollHeight() : 0;
+    const innerH = (unifiedContentPane.height as number) - 2;
+    const scrollPerc = typeof box.getScrollPerc === 'function' ? box.getScrollPerc() : 0;
+    return scrollH <= innerH || scrollPerc >= 99;
+  }
+
+  // unified ビューで次の未読エントリーへ進む
+  function advanceUnifiedReading(): void {
+    const next = unifiedList.nextUnread();
+    if (next) {
+      openUnifiedEntry();
+    } else {
+      setStatus('No more unread entries');
+      focus = 'entry';
+      updateFocus();
+      setTimeout(() => resetStatus(), 2000);
+    }
+  }
 
   // コンテンツペインが先頭に達しているか判定
   function isContentAtTop(): boolean {
@@ -943,6 +1094,11 @@ export async function cmdUi(): Promise<void> {
   screen.key(['b'], () => {
     if (searchMode || modalOpen) return;
 
+    if (uiMode === 'unified') {
+      unifiedView.scrollPageUp();
+      return;
+    }
+
     if (focus === 'content') {
       if (!isContentAtTop()) {
         entryView.scrollPageUp();
@@ -963,6 +1119,20 @@ export async function cmdUi(): Promise<void> {
 
   screen.key(['space'], () => {
     if (searchMode || modalOpen) return;
+
+    if (uiMode === 'unified') {
+      if (focus === 'content') {
+        if (!isUnifiedContentAtBottom()) {
+          unifiedView.scrollPage();
+        } else {
+          advanceUnifiedReading();
+        }
+      } else {
+        openUnifiedEntry();
+      }
+      return;
+    }
+
     if (focus === 'content') {
       if (!isContentAtBottom()) {
         entryView.scrollPage();
@@ -1015,8 +1185,12 @@ export async function cmdUi(): Promise<void> {
   });
 
   // Initial focus
-  updateFocus();
-  feedList.refresh();
-  resetStatus();
+  if (uiMode === 'unified') {
+    switchToUnified();
+  } else {
+    updateFocus();
+    feedList.refresh();
+    resetStatus();
+  }
   screen.render();
 }

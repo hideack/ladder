@@ -8,6 +8,8 @@ export interface Layout {
   entryPane: blessed.Widgets.BoxElement;
   contentPane: blessed.Widgets.BoxElement;
   statusBar: blessed.Widgets.BoxElement;
+  unifiedListPane: blessed.Widgets.BoxElement;
+  unifiedContentPane: blessed.Widgets.BoxElement;
 }
 
 export function createLayout(): Layout {
@@ -103,7 +105,56 @@ export function createLayout(): Layout {
       ' {bold}n/p{/bold}:feed  {bold}j/k{/bold}:entry  {bold}Spc/b{/bold}:read  {bold}o{/bold}:browser  {bold}c{/bold}:pin  {bold}m{/bold}:read-all  {bold}/{/bold}:search  {bold}?{/bold}:help  {bold}q{/bold}:quit',
   });
 
-  return { screen, feedPane, entryPane, contentPane, statusBar };
+  const unifiedListPane = blessed.box({
+    parent: screen,
+    top: 0,
+    left: 0,
+    width: '40%',
+    height: '100%-1',
+    hidden: true,
+    border: { type: 'line' },
+    label: ' Unified ',
+    tags: true,
+    style: {
+      border: { fg: 'gray' },
+      label: { fg: 'gray' },
+    },
+    keys: true,
+    mouse: true,
+    scrollable: true,
+    alwaysScroll: true,
+    scrollbar: {
+      ch: '│',
+      style: { fg: 'gray' },
+    },
+  });
+
+  const unifiedContentPane = blessed.box({
+    parent: screen,
+    top: 0,
+    left: '40%',
+    width: '60%',
+    height: '100%-1',
+    hidden: true,
+    border: { type: 'line' },
+    label: ' Content ',
+    tags: true,
+    style: {
+      border: { fg: 'gray' },
+      label: { fg: 'gray' },
+    },
+    keys: true,
+    mouse: true,
+    scrollable: true,
+    alwaysScroll: true,
+    scrollbar: {
+      ch: '│',
+      style: { fg: 'gray' },
+    },
+    wrap: true,
+  });
+
+  return { screen, feedPane, entryPane, contentPane, statusBar, unifiedListPane, unifiedContentPane };
 }
 
 export function applyLayout(layout: Layout, mode: LayoutMode): void {
