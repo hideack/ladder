@@ -4,14 +4,18 @@ import { homedir } from 'os';
 import type { LayoutMode } from './layout.js';
 import type { FilterMode } from './feed-list.js';
 
+export type UiMode = '3pane' | 'unified';
+
 export interface UiState {
   layoutMode: LayoutMode;
   filterMode: FilterMode;
+  uiMode?: UiMode;
 }
 
 const DEFAULT_UI_STATE: UiState = {
   layoutMode: 'horizontal',
   filterMode: 'active',
+  uiMode: '3pane',
 };
 
 function getUiStatePath(): string {
@@ -31,6 +35,7 @@ export function loadUiState(): UiState {
       filterMode: (['active', 'unread', 'all'] as FilterMode[]).includes(parsed.filterMode as FilterMode)
         ? (parsed.filterMode as FilterMode)
         : 'active',
+      uiMode: parsed.uiMode === 'unified' ? 'unified' : '3pane',
     };
   } catch {
     return { ...DEFAULT_UI_STATE };
