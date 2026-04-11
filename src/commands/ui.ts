@@ -95,7 +95,7 @@ export async function cmdUi(): Promise<void> {
         '  {bold}l{/bold}          レイアウト切替 (水平3ペイン ↔ 垂直分割)',
         '',
         ' {bold}{cyan-fg}── 全ペイン共通 ────────────────────────{/cyan-fg}{/bold}',
-        '  {bold}n{/bold}          フィードカーソル 次へ',
+        '  {bold}n{/bold}          フィードカーソル 次へ（Contentペイン中は次の未読へ）',
         '  {bold}j / k{/bold}      フォーカス依存: Feedペイン→フィード移動 / 他→エントリー移動',
         '  {bold}J / K{/bold}      同上・ページ単位移動',
         '  {bold}p{/bold}          ピン留めトグル',
@@ -579,9 +579,14 @@ export async function cmdUi(): Promise<void> {
     openSelectedEntry();
   });
 
-  // n: フォーカスに関わらず常にフィードカーソルを次へ移動
+  // n: content ペイン中は次の未読へ進む（space 末端到達フローと同様）
+  //    それ以外はフィードカーソルを次へ移動
   screen.key(['n'], () => {
     if (searchMode || modalOpen) return;
+    if (focus === 'content') {
+      advanceSpaceReading();
+      return;
+    }
     feedList.refresh();
     feedList.moveDown();
     const sel = feedList.getSelected();
