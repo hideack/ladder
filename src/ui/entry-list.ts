@@ -134,6 +134,18 @@ export class EntryList {
     return this.getSelected();
   }
 
+  moveToTop(): Entry | null {
+    this.selectedIndex = 0;
+    this.render();
+    return this.getSelected();
+  }
+
+  moveToBottom(): Entry | null {
+    this.selectedIndex = Math.max(0, this.entries.length - 1);
+    this.render();
+    return this.getSelected();
+  }
+
   nextUnread(): Entry | null {
     for (let i = this.selectedIndex + 1; i < this.entries.length; i++) {
       if (!this.entries[i].is_read) {

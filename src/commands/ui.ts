@@ -104,6 +104,9 @@ export async function cmdUi(): Promise<void> {
         '  {bold}n{/bold}          フィードカーソル 次へ（Contentペイン中は次の未読へ）',
         '  {bold}j / k{/bold}      フォーカス依存: Feedペイン→フィード移動 / 他→エントリー移動',
         '  {bold}J / K{/bold}      同上・ページ単位移動',
+        '  {bold}gg{/bold}         リスト先頭へジャンプ',
+        '  {bold}G{/bold}          リスト末尾へジャンプ',
+        '  {bold}Escape / BS{/bold} content→entry→feed の逆フォーカス移動',
         '  {bold}p{/bold}          ピン留めトグル',
         '  {bold}P{/bold}          ピン一覧を全部ブラウザで開いてピン解放',
         '  {bold}Space{/bold}      未読記事を順に読む (次へ)',
@@ -148,7 +151,7 @@ export async function cmdUi(): Promise<void> {
 
   function resetStatus(): void {
     statusBar.setContent(
-      ' {bold}n{/bold}:feed-next  {bold}j/k{/bold}:move  {bold}J/K{/bold}:page  {bold}Spc/b{/bold}:read  {bold}v{/bold}:browser  {bold}e{/bold}:full-article  {bold}E{/bold}:ai  {bold}S-d{/bold}:podcast-dl  {bold}p{/bold}:pin  {bold}P{/bold}:open-all-pins  {bold}a{/bold}:category  {bold}C{/bold}:cat-mgr  {bold}l{/bold}:layout  {bold}/{/bold}:search  {bold}?{/bold}:help  {bold}q{/bold}:quit'
+      ' {bold}n{/bold}:next  {bold}j/k{/bold}:move  {bold}J/K{/bold}:page  {bold}gg/G{/bold}:top/bottom  {bold}Spc/b{/bold}:read  {bold}v{/bold}:browser  {bold}e{/bold}:full-article  {bold}E{/bold}:ai  {bold}S-d{/bold}:podcast-dl  {bold}p{/bold}:pin  {bold}P{/bold}:open-all-pins  {bold}a{/bold}:cat  {bold}C{/bold}:cat-mgr  {bold}/{/bold}:search  {bold}Esc{/bold}:back  {bold}?{/bold}:help  {bold}q{/bold}:quit'
     );
     screen.render();
   }
@@ -261,19 +264,31 @@ export async function cmdUi(): Promise<void> {
     logKey(keyName, focus);
   });
 
-  // Escape: 検索確定後の絞り込み状態を解除して通常ビューに戻す
+  // Escape: 検索確定後の絞り込み解除、または content→entry→feed の逆フォーカス移動
   screen.key(['escape'], () => {
     if (searchMode || modalOpen) return; // 検索入力中・モーダル中は onKeypress 側で処理
-    if (searchRestoreState === null) return;
-    const { originPane, feedId, showPinned, filterMode } = searchRestoreState;
-    searchRestoreState = null;
-    feedList.filterMode = filterMode;
-    feedList.clearSearch();
-    if (originPane !== 'feed') {
-      if (feedId != null) {
-        entryList.loadFeed(feedId);
-      } else if (showPinned) {
-        entryList.loadPinned();
+    if (searchRestoreState !== null) {
+      const { originPane, feedId, showPinned, filterMode } = searchRestoreState;
+      searchRestoreState = null;
+      feedList.filterMode = filterMode;
+      feedList.clearSearch();
+      if (originPane !== 'feed') {
+        if (feedId != null) {
+          entryList.loadFeed(feedId);
+        } else if (showPinned) {
+          entryList.loadPinned();
+        }
+      }
+      return;
+    }
+    // 検索モード外: content → entry → feed の順に逆戻り
+    if (uiMode === '3pane') {
+      if (focus === 'content') {
+        focus = 'entry';
+        updateFocus();
+      } else if (focus === 'entry') {
+        focus = 'feed';
+        updateFocus();
       }
     }
   });
@@ -785,6 +800,62 @@ export async function cmdUi(): Promise<void> {
     } else {
       entryList.movePageUp();
       openSelectedEntry();
+    }
+  });
+
+  // g/G: リスト先頭(gg) / 末尾(G) ジャンプ
+  let lastGTime = 0;
+  screen.key(['g'], () => {
+    if (searchMode || modalOpen) return;
+    const now = Date.now();
+    if (now - lastGTime < 500) {
+      // gg: 先頭へ
+      lastGTime = 0;
+      if (uiMode === 'unified') {
+        unifiedList.moveToTop();
+        openUnifiedEntry();
+      } else if (focus === 'feed') {
+        feedList.moveToTop();
+        const sel = feedList.getSelected();
+        if (sel?.type === 'feed' && sel.feed) { entryList.loadFeed(sel.feed.id); previewSelectedEntry(); }
+        else if (sel?.type === 'pinned') { entryList.loadPinned(); previewSelectedEntry(); }
+      } else {
+        entryList.moveToTop();
+        openSelectedEntry();
+      }
+    } else {
+      lastGTime = now;
+    }
+  });
+
+  screen.key(['S-g'], () => {
+    if (searchMode || modalOpen) return;
+    lastGTime = 0;
+    if (uiMode === 'unified') {
+      unifiedList.moveToBottom();
+      openUnifiedEntry();
+    } else if (focus === 'feed') {
+      feedList.moveToBottom();
+      const sel = feedList.getSelected();
+      if (sel?.type === 'feed' && sel.feed) { entryList.loadFeed(sel.feed.id); previewSelectedEntry(); }
+      else if (sel?.type === 'pinned') { entryList.loadPinned(); previewSelectedEntry(); }
+    } else {
+      entryList.moveToBottom();
+      openSelectedEntry();
+    }
+  });
+
+  // Backspace: escape と同じ逆フォーカス移動（content→entry→feed）
+  screen.key(['backspace'], () => {
+    if (searchMode || modalOpen) return;
+    if (uiMode === '3pane') {
+      if (focus === 'content') {
+        focus = 'entry';
+        updateFocus();
+      } else if (focus === 'entry') {
+        focus = 'feed';
+        updateFocus();
+      }
     }
   });
 
