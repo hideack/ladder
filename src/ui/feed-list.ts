@@ -277,6 +277,16 @@ export class FeedList {
     this.render();
   }
 
+  moveToTop(): void {
+    this.selectedIndex = 0;
+    this.render();
+  }
+
+  moveToBottom(): void {
+    this.selectedIndex = Math.max(0, this.displayItems.length - 1);
+    this.render();
+  }
+
   getSelected(): FeedListItem | undefined {
     return this.displayItems[this.selectedIndex];
   }

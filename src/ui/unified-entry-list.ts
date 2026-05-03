@@ -138,6 +138,18 @@ export class UnifiedEntryList {
     return this.getSelected();
   }
 
+  moveToTop(): (Entry & { feed_title: string }) | null {
+    this.selectedIndex = 0;
+    this.render();
+    return this.getSelected();
+  }
+
+  moveToBottom(): (Entry & { feed_title: string }) | null {
+    this.selectedIndex = Math.max(0, this.entries.length - 1);
+    this.render();
+    return this.getSelected();
+  }
+
   nextUnread(): (Entry & { feed_title: string }) | null {
     for (let i = this.selectedIndex + 1; i < this.entries.length; i++) {
       if (!this.entries[i].is_read) {
