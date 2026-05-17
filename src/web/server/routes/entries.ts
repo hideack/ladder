@@ -2,6 +2,7 @@ import { Hono } from 'hono';
 import type { Queries } from '../../../db/queries.js';
 import type { ApiEntryDetail, FullContentResponse } from '../../shared/types.js';
 import { fetchArticleContent } from '../../../crawler/content-fetcher.js';
+import { isAudioEnclosure } from '../lib/enclosure.js';
 
 export function entriesRoutes(q: Queries): Hono {
   const app = new Hono();
@@ -13,6 +14,7 @@ export function entriesRoutes(q: Queries): Hono {
     const entry = q.getEntryWithFeedTitle(id);
     if (!entry) return c.json({ error: 'not found' }, 404);
 
+    const isAudio = isAudioEnclosure(entry.enclosure_type, entry.enclosure_url);
     const body: ApiEntryDetail = {
       id: entry.id,
       feed_id: entry.feed_id,
@@ -23,11 +25,11 @@ export function entriesRoutes(q: Queries): Hono {
       published_at: entry.published_at,
       is_read: entry.is_read === 1,
       is_pinned: entry.is_pinned === 1,
-      has_enclosure: entry.enclosure_url != null,
+      has_enclosure: isAudio,
       content: entry.content,
-      enclosure_url: entry.enclosure_url,
-      enclosure_type: entry.enclosure_type,
-      enclosure_length: entry.enclosure_length,
+      enclosure_url: isAudio ? entry.enclosure_url : null,
+      enclosure_type: isAudio ? entry.enclosure_type : null,
+      enclosure_length: isAudio ? entry.enclosure_length : null,
     };
     return c.json(body);
   });

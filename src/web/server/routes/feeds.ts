@@ -1,6 +1,7 @@
 import { Hono } from 'hono';
 import type { Queries, Feed } from '../../../db/queries.js';
 import type { ApiFeed, ApiCategory, ApiEntrySummary, FilterMode, SortMode } from '../../shared/types.js';
+import { isAudioEnclosure } from '../lib/enclosure.js';
 
 const STALE_THRESHOLD_SEC = 180 * 24 * 60 * 60;
 
@@ -88,7 +89,7 @@ export function feedsRoutes(q: Queries): Hono {
         published_at: e.published_at,
         is_read: e.is_read === 1,
         is_pinned: e.is_pinned === 1,
-        has_enclosure: e.enclosure_url != null,
+        has_enclosure: isAudioEnclosure(e.enclosure_type, e.enclosure_url),
       }));
       return c.json({ entries: summaries });
     }
