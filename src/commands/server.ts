@@ -4,12 +4,12 @@ import { Queries } from '../db/queries.js';
 import { buildApp } from '../web/server/app.js';
 import { startDbWatcher } from '../web/server/db-watcher.js';
 
-export interface ServeOptions {
+export interface ServerOptions {
   port?: string;
   host?: string;
 }
 
-export async function cmdServe(options: ServeOptions): Promise<void> {
+export async function cmdServer(options: ServerOptions): Promise<void> {
   const port = Number(options.port ?? 4317);
   const host = options.host ?? '127.0.0.1';
 
@@ -25,7 +25,7 @@ export async function cmdServe(options: ServeOptions): Promise<void> {
   const stopWatcher = startDbWatcher(q);
 
   serve({ fetch: app.fetch, port, hostname: host }, (info) => {
-    console.log(`ladder serve listening on http://${info.address}:${info.port}`);
+    console.log(`ladder server listening on http://${info.address}:${info.port}`);
   });
 
   const shutdown = () => {
