@@ -3,7 +3,7 @@
 CLI で動く RSS/Atom フィードリーダー。[fastladder](https://github.com/fastladder/fastladder) へのオマージュ。
 
 - ターミナル上の 3 ペイン TUI で記事を読む
-- ブラウザから閲覧できるローカル Web UI（`ladder serve`）
+- ブラウザから閲覧できるローカル Web UI（`ladder server`）
 - SQLite にローカル保存（`~/.config/ladder/ladder.db`）
 - MCP サーバーモードで AI エージェントからも参照可能
 
@@ -52,9 +52,9 @@ ladder ui
 ### Web UI を起動する
 
 ```bash
-ladder serve                    # http://127.0.0.1:4317
-ladder serve --port 8080        # ポート指定
-ladder serve --host 0.0.0.0     # LAN / Tailscale 公開時
+ladder server                   # http://127.0.0.1:4317
+ladder server --port 8080       # ポート指定
+ladder server --host 0.0.0.0    # LAN / Tailscale 公開時
 ```
 
 ブラウザで `http://127.0.0.1:4317` を開くと、TUI と同じ 3 ペイン構成で記事を読めます。キーバインドも TUI に揃えています（`j` / `k` / `Space` / `p` / `e` / `?` など）。Podcast エントリーはインラインの `<audio>` プレーヤーで再生できます。

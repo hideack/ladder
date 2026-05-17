@@ -10,7 +10,7 @@ TypeScript + neo-blessed による TUI、SQLite でローカル保存、MCP サ�
 ```bash
 npx tsx bin/ladder.ts            # 開発実行
 npx tsx bin/ladder.ts ui         # TUI 起動
-npx tsx bin/ladder.ts serve      # Web UI 起動（要 npm run build:web 済み）
+npx tsx bin/ladder.ts server     # Web UI 起動（要 npm run build:web 済み）
 npx tsx bin/ladder.ts --help     # コマンド一覧
 npx tsc --noEmit                 # 型チェック（neo-blessed 型不足の警告は既知）
 npm run build:web                # Vite で SPA をビルド (dist/web/)
@@ -31,7 +31,7 @@ src/
     index.ts           crawlFeed() — ETag/304 対応、タイムアウト 10 秒
   commands/
     ui.ts              TUI 起動・全キーバインド管理
-    serve.ts           Web UI サーバー起動 (Hono)
+    server.ts          Web UI サーバー起動 (Hono)
     add.ts             ladder add <url>
     fetch.ts           ladder fetch
     podcast.ts         ladder podcast download — Podcast MP3 ダウンロード
@@ -211,10 +211,10 @@ S-d 押下
 
 `npm link` で導入したバイナリを使う場合は `npm run build` で再ビルドが必要。
 
-## Web UI (`ladder serve`)
+## Web UI (`ladder server`)
 
 ```bash
-ladder serve [--port 4317] [--host 127.0.0.1]
+ladder server [--port 4317] [--host 127.0.0.1]
 ```
 
 ### 構成
@@ -247,7 +247,7 @@ npm run dev:server   # tsx watch で API サーバー (port 4317)
 npm run dev:client   # Vite dev server (port 5173) — /api と /events を 4317 へ proxy
 ```
 
-ブラウザは `http://127.0.0.1:5173/` を開く（dev のみ）。本番起動時は `ladder serve` のみで完結。
+ブラウザは `http://127.0.0.1:5173/` を開く（dev のみ）。本番起動時は `ladder server` のみで完結。
 
 ### Web UI 固有のキーバインド
 
