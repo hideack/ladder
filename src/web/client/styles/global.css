@@ -1,0 +1,59 @@
+:root {
+  --bg: #0f1115;
+  --bg-pane: #151821;
+  --bg-pane-focus: #1c2030;
+  --bg-row-selected: #2a3148;
+  --bg-row-cursor: #1a1f2e;
+  --border: #2a2f3c;
+  --border-focus: #4a8cf7;
+  --fg: #e6e8ee;
+  --fg-muted: #8a92a6;
+  --fg-dim: #5a6172;
+  --accent-blue: #4a8cf7;
+  --accent-yellow: #ffd166;
+  --accent-red: #ef4444;
+  --accent-green: #34d399;
+  --link: #7eb8ff;
+  --font-mono: ui-monospace, "SFMono-Regular", Menlo, Monaco, Consolas, "Liberation Mono", monospace;
+  --font-sans: -apple-system, BlinkMacSystemFont, "Helvetica Neue", "Hiragino Kaku Gothic ProN",
+               "Yu Gothic UI", Meiryo, sans-serif;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html, body, #app {
+  height: 100%;
+  margin: 0;
+  padding: 0;
+}
+
+body {
+  background: var(--bg);
+  color: var(--fg);
+  font-family: var(--font-sans);
+  font-size: 13px;
+  line-height: 1.5;
+  overflow: hidden;
+}
+
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+::-webkit-scrollbar-thumb {
+  background: #2a2f3c;
+  border-radius: 4px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+a {
+  color: var(--link);
+  text-decoration: none;
+}
+a:hover {
+  text-decoration: underline;
+}

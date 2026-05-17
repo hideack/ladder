@@ -10,9 +10,13 @@ TypeScript + neo-blessed による TUI、SQLite でローカル保存、MCP サ�
 ```bash
 npx tsx bin/ladder.ts            # 開発実行
 npx tsx bin/ladder.ts ui         # TUI 起動
+npx tsx bin/ladder.ts serve      # Web UI 起動（要 npm run build:web 済み）
 npx tsx bin/ladder.ts --help     # コマンド一覧
 npx tsc --noEmit                 # 型チェック（neo-blessed 型不足の警告は既知）
-npm run build                    # esbuild でバンドル
+npm run build:web                # Vite で SPA をビルド (dist/web/)
+npm run build                    # SPA + esbuild バンドル一括
+npm run dev:server               # tsx watch で API サーバーのみ起動
+npm run dev:client               # Vite dev server (HMR)
 ```
 
 ## アーキテクチャ
@@ -27,6 +31,7 @@ src/
     index.ts           crawlFeed() — ETag/304 対応、タイムアウト 10 秒
   commands/
     ui.ts              TUI 起動・全キーバインド管理
+    serve.ts           Web UI サーバー起動 (Hono)
     add.ts             ladder add <url>
     fetch.ts           ladder fetch
     podcast.ts         ladder podcast download — Podcast MP3 ダウンロード
@@ -41,6 +46,22 @@ src/
     entry-view.ts      右ペイン — EntryView クラス
   mcp/
     server.ts          ladder mcp — stdio transport
+  web/
+    server/
+      app.ts                 Hono app・SPA 配信
+      routes/feeds.ts        /api/feeds 系
+      routes/entries.ts      /api/entries 系
+      routes/events.ts       /events (SSE)
+      sse-bus.ts             EventEmitter ベースのイベントバス
+      db-watcher.ts          ladder.db-wal を fs.watch
+    shared/
+      types.ts               サーバー・クライアント共通型
+    client/                  Vue 3 + Pinia + Vite SPA
+      App.vue / main.ts
+      components/            ThreePane 構成のコンポーネント群
+      stores/                Pinia ストア (feeds / entries / ui)
+      composables/           useKeyboard / useSSE / useApi
+      utils/                 sanitize (DOMPurify) / format
 ```
 
 ## DB
@@ -189,6 +210,54 @@ S-d 押下
 ```
 
 `npm link` で導入したバイナリを使う場合は `npm run build` で再ビルドが必要。
+
+## Web UI (`ladder serve`)
+
+```bash
+ladder serve [--port 4317] [--host 127.0.0.1]
+```
+
+### 構成
+
+- Hono が API・SSE・SPA を 1 ポートで配信
+- フロントは Vue 3 + Pinia + Vite。SPA は `dist/web/` にビルドして配信
+- 既存 `Queries` クラスを流用し DB 層は変更なし
+- クロールは Web からは起動しない（既存の plist + `ladder fetch` 専任）
+
+### API エンドポイント
+
+| Method | Path | 用途 |
+|---|---|---|
+| GET | `/api/feeds` | フィード一覧（`?filter=active|unread|all&sort=unread|latest`） |
+| GET | `/api/feeds/:id/entries` | エントリー一覧（`:id` は数値 or `pinned`） |
+| GET | `/api/entries/:id` | エントリー詳細 |
+| GET | `/api/entries/:id/full-content` | サイトから本文を抽出して返す |
+| PATCH | `/api/entries/:id` | `{ read?, pinned? }` を更新 |
+| POST | `/api/feeds/:id/mark-all-read` | フィード全件既読 |
+| GET | `/events` | SSE ストリーム |
+
+### SSE による自動更新
+
+`~/.config/ladder/ladder.db-wal` を `fs.watch` で監視し、変化を debounce 500ms で確認。直近 30 秒以内に `last_fetched_at` が更新されたフィードを SSE で push。クライアントは該当フィードの一覧を再 fetch する。
+
+### 開発時のホットリロード
+
+```bash
+npm run dev:server   # tsx watch で API サーバー (port 4317)
+npm run dev:client   # Vite dev server (port 5173) — /api と /events を 4317 へ proxy
+```
+
+ブラウザは `http://127.0.0.1:5173/` を開く（dev のみ）。本番起動時は `ladder serve` のみで完結。
+
+### Web UI 固有のキーバインド
+
+TUI とほぼ同じだが以下が異なる:
+
+- `r` / `R` 未実装（クロールは plist 専任）
+- `Shift+D` 未実装（Podcast はインライン `<audio>` プレーヤー）
+- `q` 未実装（タブを閉じる）
+
+---
 
 ## MCP サーバー
 
