@@ -12,6 +12,7 @@ import { Queries } from '../src/db/queries.js';
 import { startMcpServer } from '../src/mcp/server.js';
 import { cmdDaemonInstall, cmdDaemonUninstall, cmdDaemonStatus } from '../src/commands/daemon.js';
 import { cmdPodcastDownload, PodcastDownloadOptions } from '../src/commands/podcast.js';
+import { cmdServe, ServeOptions } from '../src/commands/serve.js';
 
 const program = new Command();
 
@@ -26,6 +27,16 @@ program
   .description('Launch the 3-pane TUI')
   .action(async () => {
     await cmdUi();
+  });
+
+// ── serve ─────────────────────────────────────────────────────────────────────
+program
+  .command('serve')
+  .description('Start the local Web UI server')
+  .option('--port <port>', 'Port to listen on', '4317')
+  .option('--host <host>', 'Host to bind to', '127.0.0.1')
+  .action(async (options: ServeOptions) => {
+    await cmdServe(options);
   });
 
 // ── add ───────────────────────────────────────────────────────────────────────

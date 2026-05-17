@@ -3,6 +3,7 @@
 CLI で動く RSS/Atom フィードリーダー。[fastladder](https://github.com/fastladder/fastladder) へのオマージュ。
 
 - ターミナル上の 3 ペイン TUI で記事を読む
+- ブラウザから閲覧できるローカル Web UI（`ladder serve`）
 - SQLite にローカル保存（`~/.config/ladder/ladder.db`）
 - MCP サーバーモードで AI エージェントからも参照可能
 
@@ -47,6 +48,18 @@ cron での定期実行例（30 分ごと）:
 ```bash
 ladder ui
 ```
+
+### Web UI を起動する
+
+```bash
+ladder serve                    # http://127.0.0.1:4317
+ladder serve --port 8080        # ポート指定
+ladder serve --host 0.0.0.0     # LAN / Tailscale 公開時
+```
+
+ブラウザで `http://127.0.0.1:4317` を開くと、TUI と同じ 3 ペイン構成で記事を読めます。キーバインドも TUI に揃えています（`j` / `k` / `Space` / `p` / `e` / `?` など）。Podcast エントリーはインラインの `<audio>` プレーヤーで再生できます。
+
+初回起動前に `npm run build:web` で SPA をビルドしておいてください（`npm run build` でも一緒にビルドされます）。開発時は `npm run dev:client` で Vite HMR を有効にし、`npm run dev:server` で API サーバーを別プロセスで動かせます。
 
 ### OPML
 
@@ -175,6 +188,9 @@ ladder mcp   # stdio transport で起動
 |---|---|
 | 言語 | TypeScript (Node.js 20+) |
 | TUI | neo-blessed |
+| Web サーバー | Hono |
+| Web フロント | Vue 3 + Pinia + Vite |
+| HTML サニタイズ | isomorphic-dompurify |
 | DB | SQLite (better-sqlite3、WAL モード、FTS5) |
 | CLI | commander |
 | RSS パーサー | rss-parser |

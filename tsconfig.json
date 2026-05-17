@@ -9,5 +9,6 @@
     "rootDir": ".",
     "skipLibCheck": true
   },
-  "include": ["bin/**/*", "src/**/*"]
+  "include": ["bin/**/*", "src/**/*"],
+  "exclude": ["src/web/client/**/*", "dist/**/*"]
 }
