@@ -1,9 +1,11 @@
 <script setup lang="ts">
 import { computed, nextTick, ref, watch } from 'vue';
 import { useFeedsStore } from '../stores/feeds';
+import { useEntriesStore } from '../stores/entries';
 import { useUiStore } from '../stores/ui';
 
 const feedsStore = useFeedsStore();
+const entriesStore = useEntriesStore();
 const uiStore = useUiStore();
 
 const listEl = ref<HTMLElement | null>(null);
@@ -23,9 +25,20 @@ function feedTitle(feed: { title: string; url: string }): string {
   try { return new URL(feed.url).hostname; } catch { return feed.url; }
 }
 
-function selectByIndex(idx: number) {
+async function selectByIndex(idx: number) {
   feedsStore.selectedIndex = idx;
   uiStore.setFocus('feed');
+  const row = feedsStore.rows[idx];
+  if (!row) return;
+  if (row.type === 'category') {
+    feedsStore.toggleCollapseSelected();
+    return;
+  }
+  const fid = feedsStore.selectedFeedId;
+  if (fid != null) {
+    uiStore.setFullContent(null);
+    await entriesStore.loadForFeed(fid);
+  }
 }
 
 watch(
