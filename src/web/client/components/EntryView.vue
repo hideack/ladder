@@ -1,25 +1,74 @@
 <script setup lang="ts">
-import { computed, ref, watch } from 'vue';
+import { computed, nextTick, onUnmounted, ref, watch } from 'vue';
 import { useEntriesStore } from '../stores/entries';
+import { useFeedsStore } from '../stores/feeds';
 import { useUiStore } from '../stores/ui';
+import { api } from '../composables/useApi';
 import { formatDateTime } from '../utils/format';
 import { renderHtml } from '../utils/sanitize';
 import PodcastPlayer from './PodcastPlayer.vue';
 
+// Wait this long after an entry loads before checking if it fully fits in the
+// viewport. Buys time for late-loading images to reflow the layout — otherwise
+// short-looking content might auto-mark before its images arrive.
+const SHORT_CONTENT_DELAY_MS = 1500;
+
 const entriesStore = useEntriesStore();
+const feedsStore = useFeedsStore();
 const uiStore = useUiStore();
 
 const bodyEl = ref<HTMLElement | null>(null);
+let autoReadMarkedId: number | null = null;
+let shortContentTimer: number | null = null;
 
 const html = computed(() => renderHtml(entriesStore.detail?.content ?? ''));
 
-// Reset scroll when the entry changes.
+function isAtBottom(): boolean {
+  if (!bodyEl.value) return false;
+  const { scrollTop, scrollHeight, clientHeight } = bodyEl.value;
+  return scrollTop + clientHeight >= scrollHeight - 2;
+}
+
+async function markCurrentAsRead() {
+  const entry = entriesStore.detail;
+  if (!entry || entry.is_read) return;
+  if (autoReadMarkedId === entry.id) return;
+  autoReadMarkedId = entry.id;
+  entriesStore.setEntryFlags(entry.id, { read: true });
+  feedsStore.decrementUnread(entry.feed_id);
+  try {
+    await api.patchEntry(entry.id, { read: true });
+  } catch (err) {
+    console.error('auto mark-as-read failed', err);
+    autoReadMarkedId = null;
+  }
+}
+
+function onBodyScroll() {
+  if (isAtBottom()) markCurrentAsRead();
+}
+
+// When the entry changes: reset scroll, then schedule a "still fits" check.
 watch(
   () => entriesStore.detail?.id,
-  () => {
+  async (id) => {
     if (bodyEl.value) bodyEl.value.scrollTop = 0;
+    if (shortContentTimer) {
+      clearTimeout(shortContentTimer);
+      shortContentTimer = null;
+    }
+    if (id == null) return;
+    await nextTick();
+    shortContentTimer = window.setTimeout(() => {
+      shortContentTimer = null;
+      if (isAtBottom()) markCurrentAsRead();
+    }, SHORT_CONTENT_DELAY_MS);
   }
 );
+
+onUnmounted(() => {
+  if (shortContentTimer) clearTimeout(shortContentTimer);
+});
 
 defineExpose({
   scrollBy(delta: number) {
@@ -31,11 +80,7 @@ defineExpose({
   scrollToBottom() {
     if (bodyEl.value) bodyEl.value.scrollTop = bodyEl.value.scrollHeight;
   },
-  isAtBottom(): boolean {
-    if (!bodyEl.value) return true;
-    const { scrollTop, scrollHeight, clientHeight } = bodyEl.value;
-    return scrollTop + clientHeight >= scrollHeight - 2;
-  },
+  isAtBottom,
 });
 </script>
 
@@ -50,7 +95,7 @@ defineExpose({
       <span v-if="entriesStore.detail" class="badge-meta">{{ entriesStore.detail.feed_title }}</span>
     </header>
 
-    <div ref="bodyEl" class="pane-body">
+    <div ref="bodyEl" class="pane-body" @scroll.passive="onBodyScroll">
       <template v-if="entriesStore.detailLoading && !entriesStore.detail">
         <div class="loading">Loading…</div>
       </template>
