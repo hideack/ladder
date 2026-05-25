@@ -110,6 +110,11 @@ function initSchema(db: Database.Database): void {
     END;
   `);
 
+  db.exec(`CREATE TABLE IF NOT EXISTS _migrations (
+    name TEXT PRIMARY KEY,
+    applied_at INTEGER NOT NULL DEFAULT (unixepoch())
+  )`);
+
   // Migrations for existing databases
   const cols = (db.prepare(`PRAGMA table_info(feeds)`).all() as { name: string }[]).map((r) => r.name);
   if (!cols.includes('next_retry_at')) {
@@ -129,4 +134,78 @@ function initSchema(db: Database.Database): void {
   if (!entryCols.includes('enclosure_length')) {
     db.exec(`ALTER TABLE entries ADD COLUMN enclosure_length INTEGER`);
   }
+
+  const hasMigration = (name: string): boolean =>
+    (db.prepare('SELECT COUNT(*) as n FROM _migrations WHERE name = ?').get(name) as { n: number }).n > 0;
+
+  if (!hasMigration('dedup_dynamic_guids')) {
+    deduplicateDynamicGuids(db);
+    db.prepare('INSERT INTO _migrations (name) VALUES (?)').run('dedup_dynamic_guids');
+  }
+}
+
+function normalizeGuidUrl(raw: string): string {
+  try {
+    const u = new URL(raw);
+    for (const p of ['_', 'utm_source', 'utm_medium', 'utm_campaign', 'utm_content', 'utm_term']) {
+      u.searchParams.delete(p);
+    }
+    const search = u.searchParams.toString();
+    return u.origin + u.pathname + (search ? '?' + search : '') + u.hash;
+  } catch {
+    return raw;
+  }
+}
+
+function deduplicateDynamicGuids(db: Database.Database): void {
+  const entries = db.prepare(
+    'SELECT id, feed_id, guid, url, is_read, is_pinned FROM entries'
+  ).all() as Array<{ id: number; feed_id: number; guid: string; url: string | null; is_read: number; is_pinned: number }>;
+
+  const byNormalizedGuid = new Map<string, typeof entries>();
+  for (const e of entries) {
+    const key = `${e.feed_id}\x00${normalizeGuidUrl(e.guid)}`;
+    if (!byNormalizedGuid.has(key)) byNormalizedGuid.set(key, []);
+    byNormalizedGuid.get(key)!.push(e);
+  }
+
+  const dupGroups = [...byNormalizedGuid.values()].filter(g => g.length > 1);
+  if (dupGroups.length === 0) return;
+
+  const run = db.transaction(() => {
+    const affectedFeeds = new Set<number>();
+    const updateEntry = db.prepare('UPDATE entries SET guid = ?, url = ?, is_read = ?, is_pinned = ? WHERE id = ?');
+    const deleteEntry = db.prepare('DELETE FROM entries WHERE id = ?');
+    const fixUnread = db.prepare(
+      'UPDATE feeds SET unread_count = (SELECT COUNT(*) FROM entries WHERE feed_id = ? AND is_read = 0) WHERE id = ?'
+    );
+
+    for (const group of dupGroups) {
+      group.sort((a, b) => a.id - b.id);
+      const [keeper, ...dupes] = group;
+
+      const anyRead = group.some(e => e.is_read === 1) ? 1 : 0;
+      const anyPinned = group.some(e => e.is_pinned === 1) ? 1 : 0;
+
+      updateEntry.run(
+        normalizeGuidUrl(keeper.guid),
+        keeper.url ? normalizeGuidUrl(keeper.url) : null,
+        anyRead,
+        anyPinned,
+        keeper.id
+      );
+
+      for (const dupe of dupes) {
+        deleteEntry.run(dupe.id);
+        affectedFeeds.add(dupe.feed_id);
+      }
+      affectedFeeds.add(keeper.feed_id);
+    }
+
+    for (const feedId of affectedFeeds) {
+      fixUnread.run(feedId, feedId);
+    }
+  });
+
+  run();
 }
