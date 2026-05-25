@@ -20,6 +20,19 @@ export interface CrawlOptions {
   onLog?: (level: 'info' | 'warn' | 'error', message: string) => void;
 }
 
+function normalizeGuid(raw: string): string {
+  try {
+    const u = new URL(raw);
+    for (const p of ['_', 'utm_source', 'utm_medium', 'utm_campaign', 'utm_content', 'utm_term']) {
+      u.searchParams.delete(p);
+    }
+    const search = u.searchParams.toString();
+    return u.origin + u.pathname + (search ? '?' + search : '') + u.hash;
+  } catch {
+    return raw;
+  }
+}
+
 const parser = new RSSParser({
   timeout: TIMEOUT_MS,
   customFields: {
@@ -120,8 +133,8 @@ export async function crawlFeed(
 
       // Insert entries
       for (const item of parsed.items ?? []) {
-        const guid = item.guid ?? item.link ?? item.title ?? String(Date.now());
-        const url = item.link ?? null;
+        const guid = normalizeGuid(item.guid ?? item.link ?? item.title ?? String(Date.now()));
+        const url = item.link ? normalizeGuid(item.link) : null;
         const entryTitle = item.title ?? '';
         const content =
           (item as Record<string, unknown>)['contentEncoded'] as string ??
