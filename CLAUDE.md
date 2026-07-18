@@ -28,7 +28,7 @@ src/
     schema.ts          openDb() / initSchema() — WAL, FTS5, トリガー
     queries.ts         Queries クラス — 型付き CRUD
   crawler/
-    index.ts           crawlFeed() — ETag/304 対応、タイムアウト 10 秒
+    index.ts           crawlFeed() — ETag/304 対応、タイムアウト 10 秒（ボディ読込は 30 秒）
   commands/
     ui.ts              TUI 起動・全キーバインド管理
     server.ts          Web UI サーバー起動 (Hono)
