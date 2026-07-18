@@ -4,6 +4,7 @@ import Database from 'better-sqlite3';
 import { Queries } from '../db/queries.js';
 
 const TIMEOUT_MS = 10_000;
+const BODY_TIMEOUT_MS = 30_000;
 const MAX_ERROR_COUNT = 5;
 const RETRY_INTERVAL_SEC = 30 * 24 * 60 * 60; // 30 days
 
@@ -90,11 +91,19 @@ export async function crawlFeed(
       if (feed.last_modified) headers['If-Modified-Since'] = feed.last_modified;
 
       const controller = new AbortController();
-      const timer = setTimeout(() => controller.abort(), TIMEOUT_MS);
+      let timer = setTimeout(() => controller.abort(), TIMEOUT_MS);
 
       let response: Awaited<ReturnType<typeof fetch>>;
+      let body = '';
       try {
         response = await fetch(feed.url, { headers, signal: controller.signal as Parameters<typeof fetch>[1] extends { signal?: infer S } ? S : never });
+        // ヘッダー受信後、ボディ読み込みにも上限を課す（送信が止まったまま
+        // 接続が維持されると text() が永久に待つため）
+        clearTimeout(timer);
+        timer = setTimeout(() => controller.abort(), BODY_TIMEOUT_MS);
+        if (response.ok) {
+          body = await response.text();
+        }
       } finally {
         clearTimeout(timer);
       }
@@ -109,8 +118,6 @@ export async function crawlFeed(
       if (!response.ok) {
         throw new Error(`HTTP ${response.status} ${response.statusText}`);
       }
-
-      const body = await response.text();
       const parsed = await parser.parseString(body);
 
       // Update feed metadata
