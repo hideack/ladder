@@ -924,22 +924,41 @@ export async function cmdUi(): Promise<void> {
     unifiedList.toggleReadSelected();
   });
 
-  // m: フォーカスに関わらず選択中フィードの全記事を既読にし、次のフィードへ移動
+  // m: フォーカスに関わらず選択中フィードの全記事を既読にし、
+  //    送り読み（Space）と同じロジックで次の未読フィードを開いて読み始める
   screen.key(['m'], () => {
     if (searchMode || modalOpen) return;
-    const feedId = entryList.getCurrentFeedId();
-    if (feedId == null) return;
+    const currentFeedId = entryList.getCurrentFeedId();
+    if (currentFeedId == null) return;
     entryList.markAllAsRead();
-    feedList.refresh(); // 既読0になったフィードが消え、カーソルが次フィードへ移動
 
-    // 移動先のフィードをエントリー一覧にも反映
-    const sel = feedList.getSelected();
-    if (sel?.type === 'feed' && sel.feed) {
-      entryList.loadFeed(sel.feed.id);
-      previewSelectedEntry();
-    } else if (sel?.type === 'pinned') {
-      entryList.loadPinned();
-      previewSelectedEntry();
+    // refresh 前（現フィードがまだ items 上に位置を持つ状態）で次の未読フィードを決める。
+    // これにより「先頭から最初の未読」ではなく「現フィードより後の未読」へ進む（送り読みと同一）。
+    const nextFeed = feedList.getNextFeedWithUnread(currentFeedId);
+
+    // 既読化したフィードが消えるよう keepVisible を次フィードへ差し替えてから refresh
+    feedList.setKeepVisibleFeed(nextFeed?.id ?? null);
+    feedList.refresh();
+
+    if (!nextFeed) {
+      focus = 'feed';
+      updateFocus();
+      setStatus('Marked all as read — no more unread');
+      setTimeout(() => resetStatus(), 2000);
+      return;
+    }
+
+    // 次の未読フィードへ進み、先頭未読を開いて読み始める（focus=content）
+    feedList.selectFeedById(nextFeed.id);
+    entryList.loadFeed(nextFeed.id);
+    const firstUnread = entryList.firstUnread();
+    if (firstUnread) {
+      focus = 'content';
+      updateFocus();
+      openSelectedEntry();
+    } else {
+      focus = 'feed';
+      updateFocus();
     }
 
     setStatus('Marked all as read');
