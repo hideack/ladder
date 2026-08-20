@@ -29,6 +29,8 @@ src/
     queries.ts         Queries クラス — 型付き CRUD
   crawler/
     index.ts           crawlFeed() — ETag/304 対応、タイムアウト 10 秒（ボディ読込は 30 秒）
+    tolerant-parse.ts  壊れた XML の救済パース — parseFeedString() / repairRawHtmlPayloads()
+    import-items.ts    importItems() — add と fetch 共通のエントリー取り込み・guid 正規化
   commands/
     ui.ts              TUI 起動・全キーバインド管理
     server.ts          Web UI サーバー起動 (Hono)
@@ -63,6 +65,23 @@ src/
       composables/           useKeyboard / useSSE / useApi
       utils/                 sanitize (DOMPurify) / format
 ```
+
+### フィードのパース
+`crawlFeed()` と `ladder add` は `parseFeedString()` 経由でパースする。
+まず厳格にパースし、**失敗したときだけ** `content:encoded` / `description` /
+`summary` / `content` の中身を CDATA で包み直して再試行する。
+配信側のバグで生 HTML がそのまま入っているフィードを救うための措置で、
+`<img ...>` のような HTML の空要素が「閉じていない開始タグ」と解釈されて落ちるのを防ぐ。
+
+修復してもなお壊れている場合は元のパースエラーをそのまま投げる（正常なフィードの挙動は変えない）。
+発動したときは警告が1行出る。
+
+```
+[warn] feed #406 "ネットショップ担当者フォーラム": malformed XML — repaired raw HTML payloads and retried
+```
+
+取り込みは add・fetch とも `importItems()` に集約している。
+**片方だけで guid の正規化や `content:encoded` の扱いを変えると、同じ記事が二重に入る。**
 
 ## DB
 
@@ -172,6 +191,16 @@ screen.key(['S-h'], ...)
 
 `getScrollPerc()` / `getScrollHeight()` など型定義にない blessed メソッドは
 `as unknown as { ... }` でキャストして使う（`entry-view.ts`, `ui.ts` 参照）。
+
+### rss-parser のパーサーインスタンスは使い回さない
+rss-parser は内部の xml2js パーサーを**コンストラクタで1個だけ生成して使い回す**。
+このため一度パースに失敗すると、同じインスタンスの次の `parseString()` が
+XML エラーを黙って無視して通ってしまう（内容は壊れたまま）。
+
+`crawler/index.ts` と `commands/add.ts` はモジュール変数ではなく `newParser()`
+ファクトリを持ち、パースのたびに新しいインスタンスを作る。ここを共有に戻すと
+救済パースの判定が呼び出し順に依存し、壊れたフィードの直後の1件でエラーが
+握り潰される。
 
 ### unread_count
 `feeds.unread_count` はトリガーで管理されるキャッシュ値。

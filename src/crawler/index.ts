@@ -2,6 +2,8 @@ import RSSParser from 'rss-parser';
 import fetch from 'node-fetch';
 import Database from 'better-sqlite3';
 import { Queries } from '../db/queries.js';
+import { parseFeedString } from './tolerant-parse.js';
+import { importItems } from './import-items.js';
 
 const TIMEOUT_MS = 10_000;
 const BODY_TIMEOUT_MS = 30_000;
@@ -21,28 +23,18 @@ export interface CrawlOptions {
   onLog?: (level: 'info' | 'warn' | 'error', message: string) => void;
 }
 
-function normalizeGuid(raw: string): string {
-  try {
-    const u = new URL(raw);
-    for (const p of ['_', 'utm_source', 'utm_medium', 'utm_campaign', 'utm_content', 'utm_term']) {
-      u.searchParams.delete(p);
-    }
-    const search = u.searchParams.toString();
-    return u.origin + u.pathname + (search ? '?' + search : '') + u.hash;
-  } catch {
-    return raw;
-  }
-}
-
-const parser = new RSSParser({
-  timeout: TIMEOUT_MS,
-  customFields: {
-    item: [
-      ['content:encoded', 'contentEncoded'],
-      ['dc:creator', 'dcCreator'],
-    ],
-  },
-});
+// rss-parser の内部パーサーは状態を持つため、パースのたびに新しく作る
+// （tolerant-parse.ts のコメント参照）
+const newParser = () =>
+  new RSSParser({
+    timeout: TIMEOUT_MS,
+    customFields: {
+      item: [
+        ['content:encoded', 'contentEncoded'],
+        ['dc:creator', 'dcCreator'],
+      ],
+    },
+  });
 
 export async function crawlFeed(
   db: Database.Database,
@@ -118,7 +110,9 @@ export async function crawlFeed(
       if (!response.ok) {
         throw new Error(`HTTP ${response.status} ${response.statusText}`);
       }
-      const parsed = await parser.parseString(body);
+      const parsed = await parseFeedString(newParser, body, () =>
+        log('warn', `feed #${feed.id} "${feed.title}": malformed XML — repaired raw HTML payloads and retried`)
+      );
 
       // Update feed metadata
       const newEtag = response.headers.get('etag') ?? undefined;
@@ -138,53 +132,9 @@ export async function crawlFeed(
         next_retry_at: null,
       });
 
-      // Insert entries
-      for (const item of parsed.items ?? []) {
-        const guid = normalizeGuid(item.guid ?? item.link ?? item.title ?? String(Date.now()));
-        const url = item.link ? normalizeGuid(item.link) : null;
-        const entryTitle = item.title ?? '';
-        const content =
-          (item as Record<string, unknown>)['contentEncoded'] as string ??
-          item.content ??
-          item.contentSnippet ??
-          null;
-        const author =
-          item.author ??
-          ((item as Record<string, unknown>)['dcCreator'] as string | undefined) ??
-          null;
-        const publishedAt = item.pubDate
-          ? Math.floor(new Date(item.pubDate).getTime() / 1000)
-          : item.isoDate
-          ? Math.floor(new Date(item.isoDate).getTime() / 1000)
-          : null;
-
-        const enclosure = item.enclosure as { url?: string; type?: string; length?: string | number } | undefined;
-        const enclosureUrl    = enclosure?.url    ?? null;
-        const enclosureType   = enclosure?.type   ?? null;
-        const enclosureLength = enclosure?.length != null ? Number(enclosure.length) : null;
-
-        const insertedId = q.insertEntry({
-          feed_id: feed.id,
-          guid,
-          url,
-          title: entryTitle,
-          content,
-          author,
-          published_at: publishedAt,
-          is_read: 0,
-          is_pinned: 0,
-          enclosure_url:    enclosureUrl,
-          enclosure_type:   enclosureType,
-          enclosure_length: enclosureLength,
-        });
-
-        if (insertedId != null) {
-          result.newEntries++;
-        } else if (enclosureUrl !== null) {
-          // 既存エントリーで enclosure_url が未設定の場合のみ補完
-          q.updateEntryEnclosure(guid, feed.id, enclosureUrl, enclosureType, enclosureLength);
-        }
-      }
+      result.newEntries += importItems(q, feed.id, parsed.items ?? [], (m) =>
+        log('warn', `feed #${feed.id} "${feed.title}": ${m}`)
+      );
 
       result.fetched++;
     } catch (err: unknown) {
