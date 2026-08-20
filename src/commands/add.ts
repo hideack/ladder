@@ -3,8 +3,11 @@ import fetch from 'node-fetch';
 import { openDb } from '../db/schema.js';
 import { Queries } from '../db/queries.js';
 import { discoverFeedUrls, isFeedContentType } from '../crawler/discover.js';
+import { parseFeedString } from '../crawler/tolerant-parse.js';
 
-const parser = new RSSParser({ timeout: 10_000 });
+// rss-parser の内部パーサーは状態を持つため、パースのたびに新しく作る
+// （tolerant-parse.ts のコメント参照）
+const newParser = () => new RSSParser({ timeout: 10_000 });
 
 // ── ANSI helpers ────────────────────────────────────────────────────────────
 const c = {
@@ -63,7 +66,9 @@ async function fetchAndParseFeed(feedUrl: string): Promise<FetchedFeed> {
     clearTimeout(timer);
   }
 
-  const parsed = await parser.parseString(body);
+  const parsed = await parseFeedString(newParser, body, () =>
+    info(`${c.yellow}Malformed XML — repaired raw HTML payloads and retried${c.reset}`)
+  );
   return { feedUrl, body, etag, lastModified, parsed };
 }
 
@@ -155,7 +160,9 @@ export async function cmdAdd(url: string): Promise<void> {
     } else {
       // フィード or 不明な Content-Type → そのまま解析
       try {
-        const parsed = await parser.parseString(body);
+        const parsed = await parseFeedString(newParser, body, () =>
+          info(`${c.yellow}Malformed XML — repaired raw HTML payloads and retried${c.reset}`)
+        );
         fetched = { feedUrl: url, body, etag, lastModified, parsed };
       } catch (parseErr) {
         // Content-Type 不明でパース失敗 → HTML として発見を試みる

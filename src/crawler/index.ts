@@ -2,6 +2,7 @@ import RSSParser from 'rss-parser';
 import fetch from 'node-fetch';
 import Database from 'better-sqlite3';
 import { Queries } from '../db/queries.js';
+import { parseFeedString } from './tolerant-parse.js';
 
 const TIMEOUT_MS = 10_000;
 const BODY_TIMEOUT_MS = 30_000;
@@ -34,15 +35,18 @@ function normalizeGuid(raw: string): string {
   }
 }
 
-const parser = new RSSParser({
-  timeout: TIMEOUT_MS,
-  customFields: {
-    item: [
-      ['content:encoded', 'contentEncoded'],
-      ['dc:creator', 'dcCreator'],
-    ],
-  },
-});
+// rss-parser の内部パーサーは状態を持つため、パースのたびに新しく作る
+// （tolerant-parse.ts のコメント参照）
+const newParser = () =>
+  new RSSParser({
+    timeout: TIMEOUT_MS,
+    customFields: {
+      item: [
+        ['content:encoded', 'contentEncoded'],
+        ['dc:creator', 'dcCreator'],
+      ],
+    },
+  });
 
 export async function crawlFeed(
   db: Database.Database,
@@ -118,7 +122,9 @@ export async function crawlFeed(
       if (!response.ok) {
         throw new Error(`HTTP ${response.status} ${response.statusText}`);
       }
-      const parsed = await parser.parseString(body);
+      const parsed = await parseFeedString(newParser, body, () =>
+        log('warn', `feed #${feed.id} "${feed.title}": malformed XML — repaired raw HTML payloads and retried`)
+      );
 
       // Update feed metadata
       const newEtag = response.headers.get('etag') ?? undefined;
