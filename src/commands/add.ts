@@ -4,10 +4,20 @@ import { openDb } from '../db/schema.js';
 import { Queries } from '../db/queries.js';
 import { discoverFeedUrls, isFeedContentType } from '../crawler/discover.js';
 import { parseFeedString } from '../crawler/tolerant-parse.js';
+import { importItems } from '../crawler/import-items.js';
 
 // rss-parser の内部パーサーは状態を持つため、パースのたびに新しく作る
 // （tolerant-parse.ts のコメント参照）
-const newParser = () => new RSSParser({ timeout: 10_000 });
+const newParser = () =>
+  new RSSParser({
+    timeout: 10_000,
+    customFields: {
+      item: [
+        ['content:encoded', 'contentEncoded'],
+        ['dc:creator', 'dcCreator'],
+      ],
+    },
+  });
 
 // ── ANSI helpers ────────────────────────────────────────────────────────────
 const c = {
@@ -30,12 +40,14 @@ function detail(key: string, val: string) {
 
 // ── Feed fetch & parse ───────────────────────────────────────────────────────
 
+type ParsedFeed = Awaited<ReturnType<ReturnType<typeof newParser>['parseString']>>;
+
 interface FetchedFeed {
   feedUrl: string;
   body: string;
   etag: string | null;
   lastModified: string | null;
-  parsed: RSSParser.Output<Record<string, unknown>>;
+  parsed: ParsedFeed;
 }
 
 async function fetchAndParseFeed(feedUrl: string): Promise<FetchedFeed> {
@@ -213,33 +225,11 @@ export async function cmdAdd(url: string): Promise<void> {
     }
 
     // ── Step 5: エントリーをインポート ────────────────────────────────────
-    let newCount = 0;
-    for (const item of parsed.items ?? []) {
-      const guid = item.guid ?? item.link ?? item.title ?? String(Date.now());
-      const content =
-        (item as Record<string, unknown>)['contentEncoded'] as string ??
-        item.content ??
-        item.contentSnippet ??
-        null;
-      const publishedAt = item.pubDate
-        ? Math.floor(new Date(item.pubDate).getTime() / 1000)
-        : item.isoDate
-        ? Math.floor(new Date(item.isoDate).getTime() / 1000)
-        : null;
-
-      const id = q.insertEntry({
-        feed_id: feed.id,
-        guid,
-        url: item.link ?? null,
-        title: item.title ?? '',
-        content,
-        author: (item.author as string | undefined) ?? null,
-        published_at: publishedAt,
-        is_read: 0,
-        is_pinned: 0,
-      });
-      if (id != null) newCount++;
-    }
+    // fetch と同じ共通処理を使う（guid の正規化や content:encoded の扱いが
+    // ずれると、後続の fetch が同じ記事を二重に入れてしまう）
+    const newCount = importItems(q, feed.id, parsed.items ?? [], (m) =>
+      info(`${c.yellow}${m}${c.reset}`)
+    );
 
     // ── Step 6: 完了メッセージ ────────────────────────────────────────────
     console.log('');

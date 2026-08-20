@@ -136,21 +136,26 @@ export class Queries {
     enclosure_type?: string | null;
     enclosure_length?: number | null;
   }): number | null {
-    try {
-      const stmt = this.db.prepare(`
-        INSERT OR IGNORE INTO entries
-          (feed_id, guid, url, title, content, author, published_at, is_read, is_pinned,
-           enclosure_url, enclosure_type, enclosure_length)
-        VALUES
-          (@feed_id, @guid, @url, @title, @content, @author, @published_at, @is_read, @is_pinned,
-           @enclosure_url, @enclosure_type, @enclosure_length)
-      `);
-      const result = stmt.run(entry);
-      if (result.changes === 0) return null;
-      return Number(result.lastInsertRowid);
-    } catch {
-      return null;
-    }
+    const stmt = this.db.prepare(`
+      INSERT OR IGNORE INTO entries
+        (feed_id, guid, url, title, content, author, published_at, is_read, is_pinned,
+         enclosure_url, enclosure_type, enclosure_length)
+      VALUES
+        (@feed_id, @guid, @url, @title, @content, @author, @published_at, @is_read, @is_pinned,
+         @enclosure_url, @enclosure_type, @enclosure_length)
+    `);
+    // better-sqlite3 は名前つきパラメータが1つでも欠けると throw する。
+    // enclosure_* は任意なので、ここで必ず埋めてから渡す。
+    const result = stmt.run({
+      ...entry,
+      enclosure_url: entry.enclosure_url ?? null,
+      enclosure_type: entry.enclosure_type ?? null,
+      enclosure_length: entry.enclosure_length ?? null,
+    });
+    // 重複は INSERT OR IGNORE が changes=0 で返す（throw しない）。
+    // ここで例外を握り潰すと本物の DB エラーまで「重複」に化けるので、そのまま投げる。
+    if (result.changes === 0) return null;
+    return Number(result.lastInsertRowid);
   }
 
   markAsRead(entryId: number): void {
